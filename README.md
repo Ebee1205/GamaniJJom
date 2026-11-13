@@ -1,66 +1,71 @@
 # GamaniJJom — 가만히 좀
 
-Windows 프로그램의 창 크기와 위치를 고정하는 데스크톱 도구입니다.
-현재는 **실행 가능한 기본 GUI와 개발 환경**까지 구현되어 있습니다.
-창 탐색·이동·크기 변경·고정 기능은 아직 구현되지 않았습니다.
+Windows 창의 위치와 크기를 관리하는 데스크톱 도구입니다.
 
 ## 실행
 
-Windows, Python 3.11 이상이 필요합니다. 별도 런타임 패키지는 없습니다.
-Tkinter는 Python 설치 시 Tcl/Tk 구성 요소가 포함되어 있어야 합니다.
+현재 IntelliJ SDK는 `.venv\Scripts\python.exe` (Python 3.11)입니다.
+Tkinter·ctypes 외에 기존 설정·로거에서 orjson과 pydantic을 사용합니다.
+새 환경은 `python -m pip install -r requirements.txt`로 준비합니다.
 
 ```powershell
 cd D:\GitHub\GamaniJJom
-# .venv가 이미 있다면 생성 명령은 생략합니다.
-py -3.11 -m venv .venv
-.\.venv\Scripts\python.exe main.py --check
-.\.venv\Scripts\python.exe main.py
+.\.venv\Scripts\python.exe src/main.py --check
+.\.venv\Scripts\python.exe src/main.py
+# 대체 실행
+.\.venv\Scripts\python.exe -m src.main
 ```
 
-가상환경 활성화 없이도 위 명령으로 실행할 수 있습니다.
-`--check`는 모듈과 Tkinter import를 검사하며, GUI 표시 자체는 검사하지 않습니다.
+`--check`는 설정·로거·UI/Win32 import를 검사하며 GUI 표시는 검사하지 않습니다.
+기존 IntelliJ `main` 설정은 `src/main.py`, 작업 폴더는 `src`입니다.
+진입점에서 프로젝트 루트를 import 경로에 추가하므로 그대로 실행할 수 있습니다.
+기본 설정·로그 경로도 프로젝트 루트 기준으로 해석합니다. IDE 설정은 보존합니다.
+
+## 사용
+
+1. HWND(16진수), PID, 제목, X/Y/너비/높이를 조회합니다.
+2. 목록 새로고침 또는 F5로 갱신합니다. 살아 있는 선택은 유지합니다.
+3. 창을 선택하면 최신 좌표·크기가 입력란에 표시됩니다.
+4. 정수를 입력하고 위치·크기 적용을 누릅니다. 실제 결과를 재조회합니다.
+
+좌표는 화면 픽셀, 크기는 바깥 창 사각형 기준입니다. 음수 X/Y를 지원합니다.
+너비·높이는 1 이상이어야 합니다. 최소화·최대화 창은 복원 후 적용합니다.
+숨김·제목 없는 창, 도구 창, 일반 소유 팝업, DWM cloaked 창,
+이 프로그램 자신의 프로세스 창은 제외합니다.
+
+변경 요청은 포커스·창 순서를 유지하며 비동기로 전달됩니다. 300ms 뒤 실제 결과를
+확인합니다. 대상 앱의 크기 제한·권한·응답 지연으로 결과가 다를 수 있습니다.
+계속 고정하거나 자동 재적용하는 기능은 아직 없습니다.
 
 ## 구조
 
 ```text
-GamaniJJom/
-├── main.py
-├── pyproject.toml
-├── requirements.txt
-├── .run/GamaniJJom.run.xml
-├── src/
-│   ├── config/settings.py
-│   ├── models/window.py
-│   ├── ui/main_window.py
-│   ├── services/lock_service.py
-│   └── platform/windows/
-│       ├── window_api.py
-│       └── window_finder.py
-├── assets/
-└── tests/
+src/main.py                         진입점·설정·로거·DPI 초기화
+src/app_context.py                  기존 애플리케이션 설정
+src/config/gamani-jjom.cfg.json      기존 설정 파일
+src/models/window_schema.py         WindowInfo / WindowRect
+src/ui/main_window.py               목록·선택·입력·결과 표시
+src/services/window_service.py      목록·PID 확인·입력 검증·적용
+src/services/lock_service.py        향후 다중 창 고정 정책용 골격
+src/platform/windows/window_api.py  ctypes Win32 선언·조회·변경
+src/platform/windows/window_finder.py 일반 창 필터링
 ```
 
-`main.py`를 진입점으로 사용합니다. `__init__.py`를 만들지 않으며,
-내부 모듈은 `from src.ui.main_window import MainWindow`처럼 절대 import합니다.
-프로젝트 루트가 import 기준입니다. `src` 자체를 Sources Root로 지정하지 않습니다.
-서비스와 Win32 어댑터는 역할을 적어 둔 골격입니다.
-아이콘과 자동 테스트는 아직 추가하지 않았습니다.
+`__init__.py` 없이 `from src...` 절대 import를 사용합니다.
+기존 설정·로거·모델·고정 서비스 골격을 보존합니다.
 
-## IntelliJ IDEA
+## 검증
 
-1. JetBrains Python 플러그인을 활성화합니다.
-2. Python SDK는 `.venv\Scripts\python.exe`를 사용합니다.
-3. 프로젝트 SDK와 모듈 SDK를 같은 Python SDK로 설정합니다.
-4. 실행 목록에서 `GamaniJJom`을 선택해 실행합니다.
-5. 설정 파일을 반영하지 못하면 프로젝트를 닫았다가 다시 엽니다.
+```powershell
+.\.venv\Scripts\python.exe -B -m unittest discover -s tests -v
+```
 
-실행 설정은 루트 `main.py`, 작업 폴더는 프로젝트 루트이며 모듈 SDK를 상속합니다.
-공식 Python 플러그인의 에디션·구독 조건은 JetBrains 안내를 확인하세요:
-https://www.jetbrains.com/help/idea/python.html
+Windows 대화형 데스크톱이 필요합니다. 별도 테스트 프로세스 창으로 조회·선택·갱신,
+실제 위치/크기 변경, 입력 오류, PID 불일치, 종료 감지를 검사하고 테스트 창을 닫습니다.
+사용자 앱은 테스트에서 이동하지 않습니다.
 
-## 다음 구현
+Win32 기준: [EnumWindows](https://learn.microsoft.com/windows/win32/api/winuser/nf-winuser-enumwindows),
+[GetWindowRect](https://learn.microsoft.com/windows/win32/api/winuser/nf-winuser-getwindowrect),
+[SetWindowPos](https://learn.microsoft.com/windows/win32/api/winuser/nf-winuser-setwindowpos).
 
-- Win32 창 목록과 정보 조회
-- 좌표·크기 입력 및 적용
-- 다중 창 고정·해제와 종료 감지
-- 설정 저장, 트레이 및 단축키
+다음 확장: 다중 창 선택, 고정 주기·해제, 종료 감지, 설정 저장.

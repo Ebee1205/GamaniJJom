@@ -1,1 +1,3 @@
-# No third-party runtime dependencies. Tkinter and ctypes use the Python standard library.
+# Tkinter and ctypes are included with Python. Existing configuration dependencies:
+orjson>=3.13,<4
+pydantic>=2.14,<3

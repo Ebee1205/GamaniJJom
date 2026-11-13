@@ -1,4 +1,18 @@
-"""Window discovery adapter.
+"""Discover visible, titled application windows; tolerate windows closing mid-scan."""
+from src.models.window_schema import WindowInfo
+from src.platform.windows import window_api
 
-Planned: enumerate visible top-level windows and return WindowInfo objects.
-"""
+
+def find_windows(excluded_pid: int) -> list[WindowInfo]:
+    windows = []
+    for hwnd in window_api.enumerate_handles():
+        try:
+            if not window_api.is_regular_window(hwnd):
+                continue
+            info = window_api.read_window(hwnd)
+            if (info.pid != excluded_pid and info.title.strip()
+                    and info.rect.width > 0 and info.rect.height > 0):
+                windows.append(info)
+        except OSError:
+            continue
+    return sorted(windows, key=lambda window: (window.title.casefold(), window.hwnd))

@@ -4,9 +4,9 @@ version = "0.1.0"
 description = "Windows window position and size utility"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["orjson>=3.13,<4", "pydantic>=2.14,<3"]
 
-# Run this desktop application from main.py; distribution packaging is deferred.
+# Run this desktop application from src/main.py; distribution packaging is deferred.
 [tool.ruff]
 target-version = "py311"
 line-length = 100

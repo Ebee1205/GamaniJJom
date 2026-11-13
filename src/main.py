@@ -38,7 +38,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--cfg",
         type=Path,
         default=Path(os.environ.get("GAMANI_CONFIG", DEFAULT_CONFIG_PATH)),
-        help="Path to cfg JSON (default: src/cfg/gamani-jjom.cfg.json, "
+        help="Path to cfg JSON (default: src/config/gamani-jjom.cfg.json, "
         "or env GAMANI_CONFIG)",
     )
     args = parser.parse_args(argv)
@@ -91,6 +91,9 @@ def run(ctx, args: argparse.Namespace) -> ExitCode:
         print("Configuration, logger and imports OK (GUI display not tested).")
         return ExitCode.OK
 
+    from src.platform.windows.window_api import enable_dpi_awareness
+
+    enable_dpi_awareness()
     app = MainWindow()
     app.ctx = ctx
 
