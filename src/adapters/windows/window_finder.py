@@ -1,6 +1,6 @@
 """Discover visible, titled application windows; tolerate windows closing mid-scan."""
 from src.models.window_schema import WindowInfo
-from src.platform.windows import window_api
+from src.adapters.windows import window_api
 
 
 def _is_listable(info: WindowInfo, excluded_pid: int) -> bool:

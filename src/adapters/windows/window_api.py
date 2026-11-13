@@ -2,22 +2,16 @@
 import ctypes
 from ctypes import wintypes as wt
 
-from src.models.window_schema import WindowInfo, WindowRect
-
-# ---- Win32 constants -------------------------------------------------------
-GWL_EXSTYLE = -20
-GW_OWNER = 4
-WS_EX_TOOLWINDOW = 0x00000080
-WS_EX_APPWINDOW = 0x00040000
-DWMWA_CLOAKED = 14
-DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4
-SWP_NOZORDER = 0x0004
-SWP_NOACTIVATE = 0x0010
-SWP_ASYNCWINDOWPOS = 0x4000
+import src.models.window_enum  as window_enum
+import src.models.window_schema as window_schema
 
 # Queue cross-thread moves to avoid waiting on an unresponsive application,
 # and preserve activation and Z order.
-MOVE_FLAGS = SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS
+MOVE_FLAGS = (
+    window_enum.SetWindowPosFlag.NOZORDER
+    | window_enum.SetWindowPosFlag.NOACTIVATE
+    | window_enum.SetWindowPosFlag.ASYNCWINDOWPOS
+)
 MIN_TITLE_BUFFER = 512
 
 # ---- Win32 bindings --------------------------------------------------------
@@ -60,7 +54,7 @@ def enable_dpi_awareness() -> None:
     """Call before creating Tk windows. Respect awareness already set by a host."""
     try:
         set_context = _bind(user32, "SetProcessDpiAwarenessContext", [wt.HANDLE], wt.BOOL)
-        set_context(ctypes.c_void_p(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2))
+        set_context(ctypes.c_void_p(window_enum.DpiAwarenessContext.PER_MONITOR_AWARE_V2))
     except AttributeError:
         _bind(user32, "SetProcessDPIAware", [], wt.BOOL)()
 
@@ -80,7 +74,7 @@ def enumerate_handles() -> list[int]:
 
 def _is_cloaked(hwnd: int) -> bool:
     cloaked = wt.DWORD()
-    result = _get_dwm_attribute(hwnd, DWMWA_CLOAKED, ctypes.byref(cloaked),
+    result = _get_dwm_attribute(hwnd, window_enum.DwmWindowAttribute.CLOAKED, ctypes.byref(cloaked),
                                 ctypes.sizeof(cloaked))
     return result == 0 and bool(cloaked.value)
 
@@ -88,10 +82,12 @@ def _is_cloaked(hwnd: int) -> bool:
 def is_regular_window(hwnd: int) -> bool:
     if not _is_window(hwnd) or not _is_window_visible(hwnd):
         return False
-    ex_style = _get_window_long(hwnd, GWL_EXSTYLE)
-    if ex_style & WS_EX_TOOLWINDOW:
+    ex_style = _get_window_long(hwnd, window_enum.WindowLongIndex.EXTENDED_STYLE)
+    if ex_style & window_enum.WindowExtendedStyle.TOOLWINDOW:
         return False
-    if _get_window(hwnd, GW_OWNER) and not (ex_style & WS_EX_APPWINDOW):
+    if _get_window(hwnd, window_enum.GetWindowCommand.OWNER) and not (
+        ex_style & window_enum.WindowExtendedStyle.APPWINDOW
+    ):
         return False
     return not _is_cloaked(hwnd)
 
@@ -102,7 +98,7 @@ def _read_title(hwnd: int) -> str:
     return buffer.value
 
 
-def read_window(hwnd: int) -> WindowInfo:
+def read_window(hwnd: int) -> window_schema.WindowInfo:
     if not _is_window(hwnd):
         raise OSError("대상 창이 종료되었습니다. 목록을 새로고침하세요.")
     pid = wt.DWORD()
@@ -111,13 +107,15 @@ def read_window(hwnd: int) -> WindowInfo:
     rect = wt.RECT()
     if not _get_window_rect(hwnd, ctypes.byref(rect)):
         raise _last_error()
-    return WindowInfo(hwnd, pid.value, _read_title(hwnd),
-                      WindowRect(rect.left, rect.top,
+    return window_schema.WindowInfo(hwnd, pid.value, _read_title(hwnd),
+                      window_schema.WindowRect(rect.left, rect.top,
                                  rect.right - rect.left, rect.bottom - rect.top))
 
 
-def set_rect(hwnd: int, rect: WindowRect) -> None:
+def set_rect(hwnd: int, rect: window_schema.WindowRect) -> None:
     if _is_iconic(hwnd) or _is_zoomed(hwnd):
         raise ValueError("최소화·최대화된 창은 일반 창으로 복원한 뒤 적용하세요.")
-    if not _set_window_pos(hwnd, None, rect.x, rect.y, rect.width, rect.height, MOVE_FLAGS):
+    if not _set_window_pos(
+        hwnd, None, rect.x, rect.y, rect.width, rect.height, int(MOVE_FLAGS)
+    ):
         raise _last_error()
