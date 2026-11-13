@@ -5,6 +5,19 @@ from src.models.window_schema import WindowInfo, WindowRect
 from src.platform.windows import window_api
 from src.platform.windows.window_finder import find_windows
 
+INT32_MIN = -(2 ** 31)
+INT32_MAX = 2 ** 31 - 1
+
+def _validate_rect(rect: WindowRect) -> None:
+    """Reject values that a Win32 `int` parameter cannot represent."""
+    # type() is int 비교로 bool(True/False)도 거부한다.
+    if not all(type(value) is int for value in (rect.x, rect.y, rect.width, rect.height)):
+        raise ValueError("좌표와 크기는 정수로 입력하세요.")
+    if not all(INT32_MIN <= value <= INT32_MAX for value in (rect.x, rect.y)):
+        raise ValueError("X/Y가 Windows 좌표 범위를 벗어났습니다.")
+    if not all(1 <= value <= INT32_MAX for value in (rect.width, rect.height)):
+        raise ValueError("너비와 높이는 1 이상의 정수로 입력하세요.")
+
 
 class WindowService:
     def list_windows(self) -> list[WindowInfo]:
@@ -19,12 +32,6 @@ class WindowService:
         return current
 
     def apply(self, target: WindowInfo, rect: WindowRect) -> None:
-        if not all(type(value) is int for value in (rect.x, rect.y, rect.width, rect.height)):
-            raise ValueError("좌표와 크기는 정수로 입력하세요.")
-        if not (-2147483648 <= rect.x <= 2147483647
-                and -2147483648 <= rect.y <= 2147483647):
-            raise ValueError("X/Y가 Windows 좌표 범위를 벗어났습니다.")
-        if not (1 <= rect.width <= 2147483647 and 1 <= rect.height <= 2147483647):
-            raise ValueError("너비와 높이는 1 이상의 정수로 입력하세요.")
+        _validate_rect(rect)
         current = self.read(target)
         window_api.set_rect(current.hwnd, rect)
