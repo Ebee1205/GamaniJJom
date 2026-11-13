@@ -91,7 +91,7 @@ def run(ctx, args: argparse.Namespace) -> ExitCode:
         print("Configuration, logger and imports OK (GUI display not tested).")
         return ExitCode.OK
 
-    from src.platform.windows.window_api import enable_dpi_awareness
+    from src.adapters.windows.window_api import enable_dpi_awareness
 
     enable_dpi_awareness()
     app = MainWindow()

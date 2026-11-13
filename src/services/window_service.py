@@ -2,11 +2,12 @@
 import os
 
 from src.models.window_schema import WindowInfo, WindowRect
-from src.platform.windows import window_api
-from src.platform.windows.window_finder import find_windows
+from src.adapters.windows import window_api
+from src.adapters.windows import window_finder
 
 INT32_MIN = -(2 ** 31)
 INT32_MAX = 2 ** 31 - 1
+
 
 def _validate_rect(rect: WindowRect) -> None:
     """Reject values that a Win32 `int` parameter cannot represent."""
@@ -21,7 +22,7 @@ def _validate_rect(rect: WindowRect) -> None:
 
 class WindowService:
     def list_windows(self) -> list[WindowInfo]:
-        return find_windows(excluded_pid=os.getpid())
+        return window_finder.find_windows(excluded_pid=os.getpid())
 
     def read(self, target: WindowInfo) -> WindowInfo:
         current = window_api.read_window(target.hwnd)
