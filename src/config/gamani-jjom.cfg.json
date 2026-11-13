@@ -1,0 +1,14 @@
+{
+  "environment": "local",
+  "project_name": "GamaniJJom",
+  "secret_key": "",
+  "logger": {
+    "level": "DEBUG",
+    "path": "logs/gamani-jjom.log",
+    "suffix": "%Y%m%d",
+    "max_bytes": 10485760,
+    "max_files": "7d",
+    "rotation": "midnight",
+    "use_console": true
+  }
+}

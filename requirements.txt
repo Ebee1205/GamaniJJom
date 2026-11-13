@@ -1,0 +1,1 @@
+# No third-party runtime dependencies. Tkinter and ctypes use the Python standard library.
