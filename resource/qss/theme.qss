@@ -26,6 +26,8 @@
     --bg-input-selection: #486d94;
     --bg-list: #202630;
     --bg-list-selected: #354c60;
+    --bg-list-preview: #2c3542;
+    --bg-list-connected: #315f53;
     --bg-list-header: #29313e;
     --bg-menu: #242c37;
     --bg-menu-selected: #3a4b60;
@@ -128,6 +130,16 @@ QTreeWidget {
 }
 QTreeWidget::item { padding: 7px 4px; }
 QTreeWidget::item:selected { background: var(--bg-list-selected); color: var(--color-text-selected); }
+/* Program lists: one click previews a row; confirmed attachments stay green. */
+QTreeWidget#windowList {
+    qproperty-connectedBackground: var(--bg-list-connected);
+    qproperty-connectedForeground: var(--color-text-selected);
+    outline: none;
+}
+QTreeWidget#windowList::item:selected {
+    background: var(--bg-list-preview);
+    color: var(--color-text-selected);
+}
 QHeaderView::section {
     background: var(--bg-list-header);
     padding: 7px;

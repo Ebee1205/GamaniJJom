@@ -56,7 +56,8 @@ class WdSizeController(QObject):
         statuses = {a.target.identity: ("Lock" if a.locked_rect else "미고정")
                     + (" · 숨김" if a.hidden else "") for a in attachments}
         offsets = {a.target.identity: f"{a.offset[0]}, {a.offset[1]}" for a in attachments}
-        self.window.window_list.set_windows([a.target for a in attachments], statuses, offsets)
+        self.window.window_list.set_windows([a.target for a in attachments], statuses, offsets,
+                                          connected_identities=self.attachments.attachments)
         self.window.connected_count.setText(f"{len(attachments)}개")
         self.refresh_picker()
 
@@ -71,7 +72,7 @@ class WdSizeController(QObject):
             windows = self.windows.list_windows()
             attached = self.attachments.attachments
             statuses = {window.identity: "연결됨" if window.identity in attached else "미연결" for window in windows}
-            self.window.available_list.set_windows(windows, statuses)
+            self.window.available_list.set_windows(windows, statuses, connected_identities=attached)
             self.window.all_count.setText(f"{len(windows)}개")
         except OSError as error:
             if self.log is not None:
