@@ -14,8 +14,11 @@ class SystemTrayComponent(QSystemTrayIcon):
 
     def __init__(self, parent=None):
         super().__init__(icon("unlock"), parent)
+        self.log = parent.ctx.log if parent is not None else None
         self.setToolTip("GamaniJJom — 창 컨트롤러")
         self.menu = QMenu()
+        self.menu.aboutToShow.connect(lambda: self.log.debug("TRAY", ">> Tray menu opened") if self.log is not None else None)
+        self.menu.triggered.connect(lambda action: self.log.debug("TRAY", ">> Tray menu action selected") if self.log is not None else None)
         self.menu.addAction("프로그램 연결…", self.attach_requested.emit)
         self.menu.addAction("연결된 프로그램·설정…", self.settings_requested.emit)
         self.connections = self.menu.addMenu("연결된 프로그램")
@@ -26,6 +29,8 @@ class SystemTrayComponent(QSystemTrayIcon):
         self.activated.connect(self.on_activated)
 
     def on_activated(self, reason):
+        if self.log is not None:
+            self.log.debug("TRAY", f">> Tray activated reason={reason.name}")
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
             self.settings_requested.emit()
 

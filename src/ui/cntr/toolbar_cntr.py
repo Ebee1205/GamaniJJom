@@ -13,6 +13,7 @@ class ToolbarController(QObject):
 
     def __init__(self, window, attachment, lock_service, capture_service, toolbar_service, window_service, parent=None):
         super().__init__(parent)
+        self.log = parent.ctx.log if parent is not None else None
         self.window = window
         self.attachment = attachment
         self.locks = lock_service
@@ -20,7 +21,13 @@ class ToolbarController(QObject):
         self.tracking = toolbar_service
         self.windows = window_service
         self._placement_error = None
+        window.log = self.log
         toolbar = window.toolbar
+        toolbar.log = self.log
+        toolbar.handle.log = self.log
+        toolbar.lock_button.log = self.log
+        toolbar.capture_button.log = self.log
+        toolbar.more_button.log = self.log
         toolbar.lock_requested.connect(self.toggle_lock)
         toolbar.capture_requested.connect(self.capture)
         toolbar.position_requested.connect(lambda: self.position_requested.emit(self.attachment.target))
@@ -34,39 +41,59 @@ class ToolbarController(QObject):
         toolbar.dragged.connect(self.drag)
 
     def toggle_lock(self):
+        if self.log is not None:
+            self.log.debug("TOOLBAR", f">> Lock toggle requested")
         try:
             self.locks.toggle(self.attachment)
+            if self.log is not None:
+                self.log.debug("TOOLBAR", f"!! Lock state changed enabled={self.attachment.locked_rect is not None}")
         except (ValueError, OSError) as error:
+            if self.log is not None:
+                self.log.debug("TOOLBAR", f"<< UI operation ended error_type={type(error).__name__}")
             self.notification.emit(str(error))
         self.sync()
         self.changed.emit()
 
     def capture(self):
+        if self.log is not None:
+            self.log.debug("TOOLBAR", f">> Capture requested")
         try:
             target = self.windows.read(self.attachment.target)
             self.capture_service.capture(target)
+            if self.log is not None:
+                self.log.debug("TOOLBAR", f"<< Capture completed hwnd={target.handle_text} pid={target.pid}")
         except (NotImplementedError, ValueError, OSError) as error:
+            if self.log is not None:
+                self.log.debug("TOOLBAR", f"<< UI operation ended error_type={type(error).__name__}")
             self.notification.emit(str(error))
 
     def sync(self):
         self.window.toolbar.set_locked(self.attachment.locked_rect is not None)
 
     def hide(self):
+        if self.log is not None:
+            self.log.debug("TOOLBAR", f">> Hide toolbar requested")
         self.attachment.hidden = True
         self.window.toolbar.menu.hide()
         self.window.hide()
         self.changed.emit()
 
     def reveal(self):
+        if self.log is not None:
+            self.log.debug("TOOLBAR", f">> Reveal toolbar requested")
         self.attachment.hidden = False
         self.update()
         self.changed.emit()
 
     def reset_position(self):
+        if self.log is not None:
+            self.log.debug("TOOLBAR", f">> Reset toolbar position requested")
         self.attachment.offset = (0, 0)
         self.update()
 
     def drag(self, dx, dy):
+        if self.log is not None:
+            self.log.debug("TOOLBAR", f">> Toolbar drag requested dx={dx} dy={dy}")
         scale = self.window.devicePixelRatioF()
         x, y = self.attachment.offset
         self.attachment.offset = x + round(dx * scale), y + round(dy * scale)
@@ -88,6 +115,8 @@ class ToolbarController(QObject):
             try:
                 self.locks.enforce(self.attachment, state.target)
             except (ValueError, OSError) as error:
+                if self.log is not None:
+                    self.log.debug("TOOLBAR", f"<< UI operation ended error_type={type(error).__name__}")
                 self.attachment.locked_rect = None
                 self.notification.emit(f"Lock 해제: {error}")
         self.sync()
@@ -103,12 +132,16 @@ class ToolbarController(QObject):
             self.window.show()
             self._placement_error = None
         except OSError as error:
+            if self.log is not None:
+                self.log.debug("TOOLBAR", f"<< UI operation ended error_type={type(error).__name__}")
             self.window.hide()
             if str(error) != self._placement_error:
                 self.notification.emit(f"컨트롤러 배치 실패: {error}")
                 self._placement_error = str(error)
 
     def dispose(self):
+        if self.log is not None:
+            self.log.debug("TOOLBAR", f"-- Toolbar disposed")
         self.attachment.locked_rect = None
         self.window.toolbar.menu.hide()
         self.window.hide()

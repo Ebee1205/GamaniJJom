@@ -9,6 +9,8 @@ class WindowListComponent(QTreeWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.log = None
+        self.selection_changed.connect(lambda target: self.log.debug("UI", f">> Window selection changed hwnd={target.handle_text if target else 'none'} pid={target.pid if target else 'none'}") if self.log is not None else None)
         self.setColumnCount(4)
         self.setHeaderLabels(["프로그램 창", "PID", "HWND", "상태"])
         self.setRootIsDecorated(False)

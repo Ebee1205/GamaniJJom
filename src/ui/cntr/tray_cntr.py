@@ -14,6 +14,7 @@ class TrayController(QObject):
         super().__init__(app)
         self.app = app
         self.ctx = ctx
+        self.log = ctx.log
         self.windows = windows
         self.attachments = attachments
         self.locks = locks
@@ -45,6 +46,8 @@ class TrayController(QObject):
         self.refresh_views()
 
     def start(self):
+        if self.log is not None:
+            self.log.debug("TRAY", f">> Tray startup requested")
         if not QSystemTrayIcon.isSystemTrayAvailable():
             QMessageBox.critical(None, "GamaniJJom", "시스템 트레이를 사용할 수 없어 종료합니다.")
             return False
@@ -54,7 +57,7 @@ class TrayController(QObject):
         return True
 
     def notify(self, message):
-        self.ctx.log.info("UI", message)
+        self.log.debug("UI", f"<< Notification displayed length={len(message)}")
         self.settings.window.status.setText(message)
         self.tray.showMessage("GamaniJJom", message)
 
@@ -63,6 +66,8 @@ class TrayController(QObject):
         self.tray.set_connections(list(self.attachments.attachments.values()))
 
     def show_picker(self):
+        if self.log is not None:
+            self.log.debug("TRAY", f">> Target selection requested")
         self.settings.show_picker()
         self.tracking.start_pick()
         self.pick_timer.start()
@@ -71,6 +76,8 @@ class TrayController(QObject):
         self.show_picker()
 
     def cancel_pick(self):
+        if self.log is not None:
+            self.log.debug("TRAY", f">> Target selection cancelled")
         self.tracking.cancel_pick()
         self.pick_timer.stop()
 
@@ -78,20 +85,28 @@ class TrayController(QObject):
         try:
             target = self.tracking.poll_pick()
         except PickCancelled as error:
+            if self.log is not None:
+                self.log.debug("TRAY", f"<< UI operation ended error_type={type(error).__name__}")
             self.cancel_pick()
             self.settings.picker.hide()
             self.notify(str(error))
             return
         except (OSError, ValueError) as error:
+            if self.log is not None:
+                self.log.debug("TRAY", f"<< UI operation ended error_type={type(error).__name__}")
             self.settings.picker.status.setText(str(error))
             return
         if target is not None:
             self.attach(target)
 
     def attach(self, target):
+        if self.log is not None:
+            self.log.debug("TRAY", f">> Attachment requested hwnd={target.handle_text} pid={target.pid}")
         try:
             attachment = self.attachments.attach(target)
         except (ValueError, OSError) as error:
+            if self.log is not None:
+                self.log.debug("TRAY", f"<< UI operation ended error_type={type(error).__name__}")
             self.settings.picker.status.setText(str(error))
             self.tracking.start_pick()
             self.pick_timer.start()
@@ -117,6 +132,8 @@ class TrayController(QObject):
         self.notify("창을 연결했습니다. 대상 창을 활성화하면 컨트롤러가 표시됩니다.")
 
     def detach(self, key):
+        if self.log is not None:
+            self.log.debug("TRAY", f"-- Attachment removal requested hwnd={key[0]} pid={key[1]}")
         controller = self.controllers.pop(key, None)
         if controller:
             controller.dispose()
@@ -125,10 +142,14 @@ class TrayController(QObject):
             self.refresh_views()
 
     def reveal(self):
+        if self.log is not None:
+            self.log.debug("TRAY", f">> Reveal all toolbars requested")
         for controller in list(self.controllers.values()):
             controller.reveal()
 
     def show_connection(self, key):
+        if self.log is not None:
+            self.log.debug("TRAY", f">> Reveal connection requested hwnd={key[0]} pid={key[1]}")
         controller = self.controllers.get(key)
         if controller:
             controller.reveal()
@@ -145,6 +166,8 @@ class TrayController(QObject):
             controller.update()
 
     def shutdown(self):
+        if self.log is not None:
+            self.log.debug("TRAY", f"- Tray shutdown requested")
         if self._closed:
             return
         self._closed = True

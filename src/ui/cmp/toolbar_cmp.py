@@ -10,6 +10,7 @@ class DragHandle(QLabel):
 
     def __init__(self, parent=None):
         super().__init__("⠿", parent)
+        self.log = None
         self.setObjectName("dragHandle")
         self.setFixedWidth(18)
         self.setToolTip("드래그하여 컨트롤러 위치 조정")
@@ -53,6 +54,7 @@ class ToolbarComponent(QFrame):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.log = None
         self.setObjectName("toolbarSurface")
         layout = QHBoxLayout(self)
         layout.setContentsMargins(6, 4, 6, 4)
@@ -70,6 +72,8 @@ class ToolbarComponent(QFrame):
         for button in (self.lock_button, self.capture_button, self.more_button):
             layout.addWidget(button)
         self.menu = QMenu(self)
+        self.menu.triggered.connect(lambda action: self.log.debug("TOOLBAR", f">> Menu action selected index={self.menu.actions().index(action)}") if self.log is not None else None)
+        self.menu.aboutToHide.connect(lambda: self.log.debug("TOOLBAR", "<< More menu closed") if self.log is not None else None)
         for text, signal in (
             ("프로그램 연결…", self.attach_requested),
             ("위치·크기 설정…", self.position_requested),
@@ -84,6 +88,8 @@ class ToolbarComponent(QFrame):
         self.more_button.clicked.connect(self.show_menu)
 
     def show_menu(self):
+        if self.log is not None:
+            self.log.debug("TOOLBAR", f">> More menu requested")
         self.menu.popup(self.more_button.mapToGlobal(self.more_button.rect().bottomLeft()))
 
     def set_locked(self, enabled: bool):

@@ -13,6 +13,7 @@ class TargetPickerDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.log = None
         self.setWindowTitle("GamaniJJom — 프로그램 연결")
         self.resize(700, 350)
         layout = QVBoxLayout(self)
@@ -46,10 +47,14 @@ class TargetPickerDialog(QDialog):
         self.shortcut.activated.connect(self.refresh_requested.emit)
 
     def choose(self):
+        if self.log is not None:
+            self.log.debug("PICKER", f">> Target list choice requested")
         target = self.window_list.selected_window()
         if target is not None:
             self.target_requested.emit(target)
 
     def reject(self):
+        if self.log is not None:
+            self.log.debug("PICKER", f">> Target selection cancelled")
         self.cancelled.emit()
         super().reject()

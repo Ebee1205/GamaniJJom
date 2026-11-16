@@ -13,6 +13,7 @@ class SettingsWindow(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.log = None
         self.setObjectName("settingsWindow")
         self.setWindowTitle("GamaniJJom — 연결된 프로그램·설정")
         self.resize(740, 380)
@@ -60,10 +61,14 @@ class SettingsWindow(QWidget):
             button.setEnabled(target is not None)
 
     def emit_selected(self, signal):
+        if self.log is not None:
+            self.log.debug("SETTINGS", f">> Selected window action requested")
         target = self.window_list.selected_window()
         if target is not None:
             signal.emit(target)
 
     def closeEvent(self, event):
+        if self.log is not None:
+            self.log.debug("SETTINGS", f">> Settings window close requested")
         self.hide()
         event.ignore()

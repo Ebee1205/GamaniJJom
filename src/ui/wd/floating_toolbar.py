@@ -10,6 +10,7 @@ class FloatingToolbarWindow(QWidget):
         flags = (Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint
                  | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.WindowDoesNotAcceptFocus)
         super().__init__(parent, flags)
+        self.log = None
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setWindowTitle(f"GamaniJJom — {title}")
@@ -20,5 +21,7 @@ class FloatingToolbarWindow(QWidget):
         self.setFixedSize(self.sizeHint())
 
     def closeEvent(self, event):
+        if self.log is not None:
+            self.log.debug("TOOLBAR", f">> Toolbar close requested")
         self.toolbar.hide_requested.emit()
         event.ignore()

@@ -11,6 +11,7 @@ class PositionDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.log = None
         self.target = None
         self.setWindowTitle("GamaniJJom — 위치·크기")
         self.setMinimumWidth(420)
@@ -27,6 +28,7 @@ class PositionDialog(QDialog):
         self.inputs = {}
         for index, (name, label) in enumerate((("x", "X"), ("y", "Y"), ("width", "너비"), ("height", "높이"))):
             field = QLineEdit()
+            field.textEdited.connect(lambda text, key=name: self.log.debug("POSITION", f">> Input edited field={key} length={len(text)}") if self.log is not None else None)
             field.setValidator(QIntValidator(-2147483648 if index < 2 else 1, 2147483647, field))
             field.setAccessibleName(label)
             self.inputs[name] = field
@@ -66,6 +68,8 @@ class PositionDialog(QDialog):
             field.setEnabled(not busy)
 
     def request_apply(self):
+        if self.log is not None:
+            self.log.debug("POSITION", f">> Position form submitted")
         if not all(field.hasAcceptableInput() for field in self.inputs.values()):
             self.status.setText("X/Y는 정수, 너비·높이는 1 이상의 정수로 입력하세요.")
             return

@@ -10,7 +10,10 @@ class ButtonComponent(QToolButton):
 
     def __init__(self, name: str, label: str, parent=None, *, checkable=False):
         super().__init__(parent)
+        self.log = None
         self.setObjectName("toolbarButton")
+        self.clicked.connect(lambda checked=False: self.log.debug("TOOLBAR", f">> Button clicked action={name} checked={checked}") if self.log is not None else None)
+        self.secondary_requested.connect(lambda: self.log.debug("TOOLBAR", f">> Button context requested action={name}") if self.log is not None else None)
         self.setAccessibleName(label)
         self.setToolTip(label)
         self.setIcon(icon(name))
