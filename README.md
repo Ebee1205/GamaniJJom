@@ -82,7 +82,7 @@ src/ui/
     sys_tray_cmp.py              SystemTrayComponent: 트레이 표시·명령 신호
   cntr/
     toolbar_cntr.py              ToolbarController: 대상 1개·Lock·Capture·표시 정책
-    settings_cntr.py             SettingsController: 목록·좌표 적용·결과 확인
+    wd_size_cntr.py             WdSizeController: 목록·좌표 적용·결과 확인
     tray_cntr.py                 TrayController: 앱 생명주기·연결 목록·트레이 명령
 src/services/toolbar_service.py  Win32 상태 조회·툴바 배치·마우스 선택
 resource/qss/theme.qss           외부 테마

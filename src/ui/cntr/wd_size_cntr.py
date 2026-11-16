@@ -6,7 +6,7 @@ from src.ui.dlg.position_dlg import PositionDialog
 from src.ui.wd.settings import SettingsWindow
 
 
-class SettingsController(QObject):
+class WdSizeController(QObject):
     target_requested = Signal(object)
     geometry_changed = Signal(object)
     quit_requested = Signal()

@@ -3,7 +3,7 @@ from PySide6.QtCore import QObject, QTimer
 from PySide6.QtWidgets import QMessageBox, QSystemTrayIcon
 
 from src.ui.cmp.sys_tray_cmp import SystemTrayComponent
-from src.ui.cntr.settings_cntr import SettingsController
+from ui.cntr.wd_size_cntr import WdSizeController
 from src.ui.cntr.toolbar_cntr import ToolbarController
 from src.ui.wd.floating_toolbar import FloatingToolbarWindow
 from src.ui.dlg.common_dlg import CommonDialog
@@ -21,7 +21,7 @@ class TrayController(QObject):
         self.capture = capture
         self.tracking = tracking
         self.controllers = {}
-        self.settings = SettingsController(windows, attachments, self)
+        self.settings = WdSizeController(windows, attachments, self)
         self.common_dlg = CommonDialog(self.settings.window, self.log)
         self.common_dlg.rejected.connect(self.cancel_quit)
         self.settings.target_requested.connect(self.attach)

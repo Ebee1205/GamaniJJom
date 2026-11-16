@@ -69,24 +69,27 @@ class AppContext:
         return self.cfg_handler.get(key, default)
 
     def set_config_value(self, key: str, value) -> AppConfig:
-        self.log.info(f"+ set cfg {key} = {value}")
         """Set a configuration value. Changes are in-memory only until save_config() is called."""
         if self.cfg_handler is None:
             raise RuntimeError("Configuration not loaded yet. Call load_config() first.")
+        if self.log is not None:
+            self.log.info(f"+ set cfg {key} = {value}")
         self.cfg = self.cfg_handler.set(key, value)
         return self.cfg
 
     def update_config(self, changes: dict) -> AppConfig:
         """Update multiple configuration values at once."""
-        self.log.info("+ update cfg")
+        if self.log is not None:
+            self.log.info("+ update cfg")
         if self.cfg_handler is None:
             raise RuntimeError("Configuration not loaded yet. Call load_config() first.")
         self.cfg = self.cfg_handler.update(changes)
         return self.cfg
 
     def save_config(self) -> None:
-        self.log.info("+ save cfg")
         """Save current configuration to file."""
+        if self.log is not None:
+            self.log.info("+ save cfg")
         if self.cfg_handler is None:
             raise RuntimeError("Configuration not loaded yet. Call load_config() first.")
         self.cfg_handler.save()
