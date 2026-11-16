@@ -41,6 +41,7 @@ class SettingsWindow(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.log = None
+        self.exit_confirmed = False
 
         self._setup_window()
 
@@ -194,9 +195,12 @@ class SettingsWindow(QWidget):
             signal.emit(target)
 
     def closeEvent(self, event):
+        if self.exit_confirmed:
+            event.accept()
+            return
         self._debug("UI", ">> Main window close requested")
+        event.ignore()
         self.quit_requested.emit()
-        event.accept()
 
     def _debug(self, tag, message):
         """로거가 설정되어 있을 때만 디버그 로그를 남긴다."""

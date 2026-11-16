@@ -25,17 +25,19 @@ class TrayController(QObject):
         self.settings.reveal_requested.connect(self.show_connection)
         self.settings.geometry_changed.connect(self.on_geometry_changed)
         self.settings.notification.connect(self.notify)
-        self.settings.quit_requested.connect(app.quit)
+        self.settings.quit_requested.connect(self.request_quit)
         self.tray = SystemTrayComponent(self)
         self.tray.attach_requested.connect(self.show_picker)
         self.tray.settings_requested.connect(self.settings.show)
         self.tray.connection_requested.connect(self.show_connection)
         self.tray.reveal_requested.connect(self.reveal)
-        self.tray.quit_requested.connect(app.quit)
+        self.tray.quit_requested.connect(self.request_quit)
         self.timer = QTimer(self)
         self.timer.setInterval(200)
         self.timer.timeout.connect(self.tick)
         self._closed = False
+        self._confirming_quit = False
+        self._quit_confirmed = False
         app.aboutToQuit.connect(self.shutdown)
         self.refresh_views()
 
@@ -100,7 +102,7 @@ class TrayController(QObject):
             controller.attach_requested.connect(self.show_picker)
             controller.detach_requested.connect(self.detach)
             controller.changed.connect(self.refresh_views)
-            controller.quit_requested.connect(self.app.quit)
+            controller.quit_requested.connect(self.request_quit)
             self.controllers[key] = controller
         self.refresh_views()
         self.controllers[key].update()
@@ -140,6 +142,37 @@ class TrayController(QObject):
     def tick(self):
         for controller in list(self.controllers.values()):
             controller.update()
+
+    def request_quit(self):
+        if self._closed or self._confirming_quit or self._quit_confirmed:
+            return
+        if self.log is not None:
+            self.log.debug("UI", ">> Exit confirmation requested")
+        self._confirming_quit = True
+        try:
+            dialog = QMessageBox(self.settings.window)
+            dialog.setWindowTitle("종료 확인")
+            dialog.setText("종료하시겠습니까?")
+            dialog.setIcon(QMessageBox.Icon.Question)
+            dialog.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            dialog.button(QMessageBox.StandardButton.Yes).setText("종료")
+            dialog.button(QMessageBox.StandardButton.No).setText("취소")
+            dialog.setDefaultButton(QMessageBox.StandardButton.No)
+            dialog.setEscapeButton(QMessageBox.StandardButton.No)
+            result = dialog.exec()
+            dialog.deleteLater()
+            if result != QMessageBox.StandardButton.Yes:
+                if self.log is not None:
+                    self.log.debug("UI", "<< Exit cancelled")
+                return
+            self._quit_confirmed = True
+            self.settings.window.exit_confirmed = True
+            if self.log is not None:
+                self.log.debug("UI", "<< Exit confirmed")
+            self.shutdown()
+            self.app.quit()
+        finally:
+            self._confirming_quit = False
 
     def shutdown(self):
         if self.log is not None:

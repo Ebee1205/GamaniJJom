@@ -133,7 +133,11 @@ def run(ctx, args: argparse.Namespace) -> ExitCode:
         signal.signal(signal.SIGTERM, handle_signal)
         
         if args.smoke_test:
-            QTimer.singleShot(1200, app.quit)
+            def finish_smoke_test():
+                controller.shutdown()
+                app.quit()
+
+            QTimer.singleShot(1200, finish_smoke_test)
         ctx.log.info("APP", "Qt application started")
         result = app.exec()
         return ExitCode.OK if result == 0 and not callback_failed else ExitCode.FAILURE
