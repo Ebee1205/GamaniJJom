@@ -75,12 +75,9 @@ class ToolbarComponent(QFrame):
         self.menu.triggered.connect(lambda action: self.log.debug("TOOLBAR", f">> Menu action selected index={self.menu.actions().index(action)}") if self.log is not None else None)
         self.menu.aboutToHide.connect(lambda: self.log.debug("TOOLBAR", "<< More menu closed") if self.log is not None else None)
         for text, signal in (
-            ("프로그램 연결…", self.attach_requested),
+            ("프로그램 목록…", self.attach_requested),
             ("위치·크기 설정…", self.position_requested),
-            ("연결된 프로그램·설정…", self.settings_requested),
             ("부착 위치 초기화", self.reset_requested),
-            ("컨트롤러 숨기기", self.hide_requested),
-            ("연결 해제 · Lock 해제", self.detach_requested),
         ):
             self.menu.addAction(text, signal.emit)
         self.menu.addSeparator()

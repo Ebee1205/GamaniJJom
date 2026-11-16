@@ -72,10 +72,9 @@ class ToolbarController(QObject):
 
     def hide(self):
         if self.log is not None:
-            self.log.debug("TOOLBAR", f">> Hide toolbar requested")
-        self.attachment.hidden = True
-        self.window.toolbar.menu.hide()
-        self.window.hide()
+            self.log.debug("TOOLBAR", "<< Toolbar kept visible for attached target")
+        self.attachment.hidden = False
+        self.update()
         self.changed.emit()
 
     def reveal(self):
@@ -123,18 +122,17 @@ class ToolbarController(QObject):
         if previous != (self.attachment.target.title, self.attachment.locked_rect):
             self.window.setWindowTitle(f"GamaniJJom — {state.target.title}")
             self.changed.emit()
-        if self.attachment.hidden or not state.show_toolbar:
-            self.window.toolbar.menu.hide()
-            self.window.hide()
-            return
         try:
-            self.tracking.place(int(self.window.winId()), state.target, self.attachment.offset)
+            # Minimized windows can report off-screen coordinates. Keep the
+            # controller at its last position until the target is restored.
+            if state.visible and not state.minimized:
+                self.tracking.place(int(self.window.winId()), state.target, self.attachment.offset)
             self.window.show()
             self._placement_error = None
         except OSError as error:
             if self.log is not None:
                 self.log.debug("TOOLBAR", f"<< UI operation ended error_type={type(error).__name__}")
-            self.window.hide()
+            self.window.show()
             if str(error) != self._placement_error:
                 self.notification.emit(f"컨트롤러 배치 실패: {error}")
                 self._placement_error = str(error)

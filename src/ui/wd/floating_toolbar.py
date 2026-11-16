@@ -23,5 +23,4 @@ class FloatingToolbarWindow(QWidget):
     def closeEvent(self, event):
         if self.log is not None:
             self.log.debug("TOOLBAR", f">> Toolbar close requested")
-        self.toolbar.hide_requested.emit()
         event.ignore()

@@ -2,7 +2,6 @@
 from PySide6.QtCore import QObject, QTimer
 from PySide6.QtWidgets import QMessageBox, QSystemTrayIcon
 
-from src.services.toolbar_service import PickCancelled
 from src.ui.cmp.sys_tray_cmp import SystemTrayComponent
 from src.ui.cntr.settings_cntr import SettingsController
 from src.ui.cntr.toolbar_cntr import ToolbarController
@@ -22,13 +21,11 @@ class TrayController(QObject):
         self.tracking = tracking
         self.controllers = {}
         self.settings = SettingsController(windows, attachments, self)
-        self.settings.attach_requested.connect(self.show_picker)
         self.settings.target_requested.connect(self.attach)
         self.settings.reveal_requested.connect(self.show_connection)
-        self.settings.detach_requested.connect(self.detach)
-        self.settings.picker_cancelled.connect(self.cancel_pick)
         self.settings.geometry_changed.connect(self.on_geometry_changed)
         self.settings.notification.connect(self.notify)
+        self.settings.quit_requested.connect(app.quit)
         self.tray = SystemTrayComponent(self)
         self.tray.attach_requested.connect(self.show_picker)
         self.tray.settings_requested.connect(self.settings.show)
@@ -38,9 +35,6 @@ class TrayController(QObject):
         self.timer = QTimer(self)
         self.timer.setInterval(200)
         self.timer.timeout.connect(self.tick)
-        self.pick_timer = QTimer(self)
-        self.pick_timer.setInterval(40)
-        self.pick_timer.timeout.connect(self.poll_pick)
         self._closed = False
         app.aboutToQuit.connect(self.shutdown)
         self.refresh_views()
@@ -69,35 +63,6 @@ class TrayController(QObject):
         if self.log is not None:
             self.log.debug("TRAY", f">> Target selection requested")
         self.settings.show_picker()
-        self.tracking.start_pick()
-        self.pick_timer.start()
-
-    def start_pick(self):
-        self.show_picker()
-
-    def cancel_pick(self):
-        if self.log is not None:
-            self.log.debug("TRAY", f">> Target selection cancelled")
-        self.tracking.cancel_pick()
-        self.pick_timer.stop()
-
-    def poll_pick(self):
-        try:
-            target = self.tracking.poll_pick()
-        except PickCancelled as error:
-            if self.log is not None:
-                self.log.debug("TRAY", f"<< UI operation ended error_type={type(error).__name__}")
-            self.cancel_pick()
-            self.settings.picker.hide()
-            self.notify(str(error))
-            return
-        except (OSError, ValueError) as error:
-            if self.log is not None:
-                self.log.debug("TRAY", f"<< UI operation ended error_type={type(error).__name__}")
-            self.settings.picker.status.setText(str(error))
-            return
-        if target is not None:
-            self.attach(target)
 
     def attach(self, target):
         if self.log is not None:
@@ -107,15 +72,25 @@ class TrayController(QObject):
         except (ValueError, OSError) as error:
             if self.log is not None:
                 self.log.debug("TRAY", f"<< UI operation ended error_type={type(error).__name__}")
-            self.settings.picker.status.setText(str(error))
-            self.tracking.start_pick()
-            self.pick_timer.start()
+            self.settings.window.status.setText(str(error))
             return
-        self.cancel_pick()
-        self.settings.picker.hide()
         key = attachment.target.identity
         attachment.hidden = False
-        if key not in self.controllers:
+        if self.controllers:
+            controller = next(iter(self.controllers.values()))
+            if controller.attachment.target.identity != key:
+                controller.window.toolbar.menu.hide()
+                self.settings.verify_timer.stop()
+                self.settings.pending = None
+                self.settings.position.hide()
+                controller.attachment = attachment
+                controller.window.setWindowTitle(f"GamaniJJom — {attachment.target.title}")
+                controller.sync()
+                self.controllers.clear()
+                self.controllers[key] = controller
+                if self.log is not None:
+                    self.log.debug("TRAY", f"!! Controller target changed hwnd={attachment.target.handle_text} pid={attachment.target.pid}")
+        else:
             window = FloatingToolbarWindow(attachment.target.title)
             controller = ToolbarController(window, attachment, self.locks, self.capture,
                                            self.tracking, self.windows, self)
@@ -129,7 +104,8 @@ class TrayController(QObject):
             self.controllers[key] = controller
         self.refresh_views()
         self.controllers[key].update()
-        self.notify("창을 연결했습니다. 대상 창을 활성화하면 컨트롤러가 표시됩니다.")
+        self.settings.window.window_list.select_identity(key)
+        self.notify("선택한 프로그램에 컨트롤러를 계속 표시합니다. 다른 프로그램을 연결하면 대상이 변경됩니다.")
 
     def detach(self, key):
         if self.log is not None:
@@ -153,7 +129,7 @@ class TrayController(QObject):
         controller = self.controllers.get(key)
         if controller:
             controller.reveal()
-            self.notify(f"{controller.attachment.target.title}: 대상 창을 활성화하세요.")
+            self.notify("연결된 프로그램의 컨트롤러를 표시했습니다.")
 
     def on_geometry_changed(self, target):
         controller = self.controllers.get(target.identity)
@@ -172,7 +148,6 @@ class TrayController(QObject):
             return
         self._closed = True
         self.timer.stop()
-        self.cancel_pick()
         self.tray.hide()
         self.tray.menu.hide()
         for key in list(self.controllers):

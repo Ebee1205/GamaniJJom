@@ -11,8 +11,8 @@ class WindowListComponent(QTreeWidget):
         super().__init__(parent)
         self.log = None
         self.selection_changed.connect(lambda target: self.log.debug("UI", f">> Window selection changed hwnd={target.handle_text if target else 'none'} pid={target.pid if target else 'none'}") if self.log is not None else None)
-        self.setColumnCount(4)
-        self.setHeaderLabels(["프로그램 창", "PID", "HWND", "상태"])
+        self.setColumnCount(9)
+        self.setHeaderLabels(["프로그램 창", "PID", "HWND", "X", "Y", "너비", "높이", "상태", "툴바 오프셋"])
         self.setRootIsDecorated(False)
         self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.setAlternatingRowColors(False)
@@ -24,22 +24,27 @@ class WindowListComponent(QTreeWidget):
         items = self.selectedItems()
         return items[0].data(0, Qt.ItemDataRole.UserRole) if items else None
 
-    def set_windows(self, windows, statuses=None):
+    def set_windows(self, windows, statuses=None, offsets=None):
         previous = self.selected_window()
         identity = previous.identity if previous else None
         statuses = statuses or {}
+        offsets = offsets or {}
         self.blockSignals(True)
         try:
             self.clear()
             for window in windows:
+                rect = window.rect
                 item = QTreeWidgetItem([window.title, str(window.pid), window.handle_text,
-                                        statuses.get(window.identity, "선택 가능")])
+                                        str(rect.x), str(rect.y), str(rect.width), str(rect.height),
+                                        statuses.get(window.identity, "미연결"), offsets.get(window.identity, "—")])
                 item.setData(0, Qt.ItemDataRole.UserRole, window)
                 self.addTopLevelItem(item)
                 if window.identity == identity:
                     self.setCurrentItem(item)
             self.resizeColumnToContents(1)
             self.resizeColumnToContents(2)
+            for column in range(3, self.columnCount()):
+                self.resizeColumnToContents(column)
         finally:
             self.blockSignals(False)
         self.selection_changed.emit(self.selected_window())
