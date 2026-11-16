@@ -1,64 +1,57 @@
-"""Screen capture service for saving window screenshots to clipboard."""
-import ctypes
-from ctypes import wintypes
+"""Capture a window, save it as PNG, and copy it to the clipboard."""
+from pathlib import Path
 
-import win32con
-import win32gui
-import win32ui
-from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtWidgets import QApplication
-
+from src.adapters.windows.window_grabber import WindowGrabber
 from src.models.window_schema import WindowInfo
-
-PW_RENDERFULLCONTENT = 0x00000002  # Win8.1+ : DWM/GPU 렌더링 창도 캡처
+from src.services.image_save_service import ImageSaveService
 
 
 class CaptureService:
-    def capture(self, target: WindowInfo) -> None:
-        """Capture the specified window (without overlapping windows) to clipboard."""
+    """캡처(WindowGrabber)와 저장(ImageSaveService)을 순서대로 호출하고 로그를 남긴다."""
+
+    def __init__(self, save_path: str | Path = "D:/saves/", log=None,
+                 grabber: WindowGrabber | None = None,
+                 saver: ImageSaveService | None = None):
+        self.log = log
+        self.grabber = grabber or WindowGrabber()
+        self.saver = saver or ImageSaveService(save_path)
+
+    @property
+    def save_path(self) -> Path:
+        return self.saver.save_path
+
+    def capture(self, target: WindowInfo) -> Path:
+        """Save the selected window to the configured folder; return its PNG path."""
         try:
-            pixmap = self._grab_window(target.hwnd)
-            QApplication.clipboard().setPixmap(pixmap)
+            pixmap = self.grabber.grab(target.hwnd)
+            output_path = self.saver.save_png(pixmap)
+            self._debug(
+                f"++ Capture saved path={ascii(str(output_path))} "
+                f"{self._target_info(target)} result=saved"
+            )
+            self._copy_to_clipboard(pixmap)
+            return output_path
         except Exception as error:
-            raise OSError(f"화면 캡처 실패: {error}")
+            self._debug(
+                f"<< Capture failed {self._target_info(target)} "
+                f"error_type={type(error).__name__} result=failed"
+            )
+            raise OSError(f"화면 캡처 실패: {error}") from error
 
-    def _grab_window(self, hwnd: int) -> QPixmap:
-        # 최소화된 창은 캡처 불가 → 복원 (원하지 않으면 예외 처리로 바꾸세요)
-        if win32gui.IsIconic(hwnd):
-            win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
-
-        left, top, right, bottom = win32gui.GetWindowRect(hwnd)
-        width, height = right - left, bottom - top
-        if width <= 0 or height <= 0:
-            raise ValueError("창 크기가 올바르지 않습니다.")
-
-        hwnd_dc = win32gui.GetWindowDC(hwnd)
-        src_dc = win32ui.CreateDCFromHandle(hwnd_dc)
-        mem_dc = src_dc.CreateCompatibleDC()
-        bitmap = win32ui.CreateBitmap()
-        bitmap.CreateCompatibleBitmap(src_dc, width, height)
-        mem_dc.SelectObject(bitmap)
-
+    # ------------------------------------------------------------------
+    def _copy_to_clipboard(self, pixmap) -> None:
+        """클립보드 복사는 부가 기능이므로 실패해도 캡처 자체는 성공으로 처리한다."""
         try:
-            ok = ctypes.windll.user32.PrintWindow(
-                hwnd, mem_dc.GetSafeHdc(), PW_RENDERFULLCONTENT
+            self.saver.copy_to_clipboard(pixmap)
+        except Exception as error:
+            self._debug(
+                f"<< Clipboard copy failed error_type={type(error).__name__} result=file_saved"
             )
-            if not ok:
-                raise OSError("PrintWindow 호출 실패")
 
-            bmp_info = bitmap.GetInfo()
-            bmp_bits = bitmap.GetBitmapBits(True)
-            image = QImage(
-                bmp_bits,
-                bmp_info["bmWidth"],
-                bmp_info["bmHeight"],
-                bmp_info["bmWidthBytes"],
-                QImage.Format.Format_ARGB32,
-            )
-            # bits 버퍼가 해제되기 전에 deep copy
-            return QPixmap.fromImage(image.copy())
-        finally:
-            win32gui.DeleteObject(bitmap.GetHandle())
-            mem_dc.DeleteDC()
-            src_dc.DeleteDC()
-            win32gui.ReleaseDC(hwnd, hwnd_dc)
+    @staticmethod
+    def _target_info(target: WindowInfo) -> str:
+        return f"hwnd={target.handle_text} pid={target.pid}"
+
+    def _debug(self, message: str) -> None:
+        if self.log is not None:
+            self.log.debug("CAPTURE", message)

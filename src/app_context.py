@@ -28,6 +28,7 @@ class AppConfig(BaseModel):
     # 상위 항목 직접 정의
     environment: str
     project_name: str
+    save_path: str
     
     # 구성 요소들
     logger: LoggerConfig
