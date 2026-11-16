@@ -5,8 +5,9 @@ from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 from src.ui.resources import icon
 
 
-class SystemTrayComponent(QSystemTrayIcon):
+class TrayWidget(QSystemTrayIcon):
     attach_requested = Signal()
+    programs_requested = Signal()
     settings_requested = Signal()
     connection_requested = Signal(object)
     quit_requested = Signal()
@@ -18,7 +19,8 @@ class SystemTrayComponent(QSystemTrayIcon):
         self.menu = QMenu()
         self.menu.aboutToShow.connect(lambda: self.log.debug("TRAY", ">> Tray menu opened") if self.log is not None else None)
         self.menu.triggered.connect(lambda action: self.log.debug("TRAY", ">> Tray menu action selected") if self.log is not None else None)
-        self.menu.addAction("프로그램 목록 열기", self.settings_requested.emit)
+        self.menu.addAction("프로그램 목록 열기", self.programs_requested.emit)
+        self.menu.addAction("설정…", self.settings_requested.emit)
         self.connections = self.menu.addMenu("연결된 프로그램")
         self.menu.addSeparator()
         self.menu.addAction("종료", self.quit_requested.emit)
@@ -29,7 +31,7 @@ class SystemTrayComponent(QSystemTrayIcon):
         if self.log is not None:
             self.log.debug("TRAY", f">> Tray activated reason={reason.name}")
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
-            self.settings_requested.emit()
+            self.programs_requested.emit()
 
     def set_connections(self, attachments):
         self.connections.clear()

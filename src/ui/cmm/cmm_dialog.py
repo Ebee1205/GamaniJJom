@@ -11,12 +11,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from src.ui.cmp.layout.dialog_layout import DialogLayout
+from src.ui.cmm.cmm_dialog_layout import CmmDialogLayout
 
 DIALOG_WIDTH = 300
 
 
-class CommonDialog(QDialog):
+class CmmDialog(QDialog):
     def __init__(self, parent=None, log=None):
         super().__init__(parent, Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
         self.log = log
@@ -38,8 +38,8 @@ class CommonDialog(QDialog):
     # ------------------------------------------------------------------
     # 공통 카드 템플릿에 본문과 버튼 위젯을 넣는다.
     # ------------------------------------------------------------------
-    def _build_surface(self) -> DialogLayout:
-        self.surface = DialogLayout(self)
+    def _build_surface(self) -> CmmDialogLayout:
+        self.surface = CmmDialogLayout(self)
         self.surface.close_requested.connect(self.reject)
         self.title_label = self.surface.title_label
         self.close_button = self.surface.close_button

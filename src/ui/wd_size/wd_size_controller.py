@@ -2,8 +2,8 @@
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from src.services.window_service import _validate_rect
-from src.ui.dlg.position_dlg import PositionDialog
-from src.ui.wd.settings import SettingsWindow
+from src.ui.wd_size.wd_size_dialog import WdSizeDialog
+from src.ui.programs_window import ProgramsWindow
 
 
 class WdSizeController(QObject):
@@ -17,8 +17,8 @@ class WdSizeController(QObject):
         self.log = parent.ctx.log if parent is not None else None
         self.windows = windows
         self.attachments = attachments
-        self.window = SettingsWindow()
-        self.position = PositionDialog()
+        self.window = ProgramsWindow()
+        self.position = WdSizeDialog()
         self.window.log = self.log
         self.position.log = self.log
         self.window.window_list.log = self.log

@@ -4,7 +4,7 @@ from src.services.capture_service import CaptureService
 from src.services.lock_service import LockService
 from src.services.toolbar_service import ToolbarService
 from src.services.window_service import WindowService
-from src.ui.cntr.tray_cntr import TrayController
+from src.ui.tray.tray_controller import TrayController
 
 
 class DesktopController(TrayController):

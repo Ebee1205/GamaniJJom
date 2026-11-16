@@ -3,7 +3,7 @@ QWidget {
     font-size: 12px;
     color: #e5e9f0;
 }
-QDialog, QWidget#settingsWindow { background: #191d24; }
+QDialog, QWidget#programsWindow { background: #191d24; }
 QFrame#toolbarSurface {
     background: rgba(30, 35, 43, 245);
     border: 1px solid #46505f;
@@ -38,7 +38,7 @@ QMenu::item:selected { background: #3a4b60; }
 QMenu::separator { height: 1px; background: #435064; margin: 4px 8px; }
 
 /* ---- Shared dialog template: header / body / footer ---- */
-QDialog#positionDialog, QDialog#commonDialog { background: transparent; }
+QDialog#positionDialog, QDialog#commonDialog, QDialog#SettingDialog { background: transparent; }
 QFrame#dialogSurface {
     background: rgba(30, 35, 43, 245);
     border: 1px solid #46505f;

@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from src.ui.cmp.window_list_cmp import WindowListComponent
+from src.ui.cmm.cmm_window_list import CmmWindowList
 
 # --- 화면 크기 / 여백 ---------------------------------------------------
 WINDOW_SIZE = (1120, 720)
@@ -29,7 +29,7 @@ TEXT_CONNECT = "선택한 프로그램 연결/변경"
 TEXT_STATUS = "프로그램 1개에 컨트롤러를 계속 표시합니다. 연결/변경 버튼으로 대상을 바꾸세요."
 
 
-class SettingsWindow(QWidget):
+class ProgramsWindow(QWidget):
     """연결 가능한 프로그램 목록과, 현재 연결된 프로그램 목록을 한 화면에 보여준다."""
 
     target_requested = Signal(object)    # 연결/변경할 프로그램을 선택함
@@ -57,7 +57,7 @@ class SettingsWindow(QWidget):
     # UI 구성
     # ------------------------------------------------------------------
     def _setup_window(self):
-        self.setObjectName("settingsWindow")
+        self.setObjectName("programsWindow")
         self.setWindowTitle(TEXT_WINDOW_TITLE)
         self.resize(*WINDOW_SIZE)
         self.setMinimumSize(*WINDOW_MIN_SIZE)
@@ -82,7 +82,7 @@ class SettingsWindow(QWidget):
         layout = QVBoxLayout(section)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self.available_list = WindowListComponent()
+        self.available_list = CmmWindowList()
         layout.addWidget(self.available_list)
 
         refresh_button = QPushButton(TEXT_REFRESH)
@@ -113,7 +113,7 @@ class SettingsWindow(QWidget):
         self.connected_count = QLabel(TEXT_EMPTY_COUNT)
         layout.addLayout(self._make_title_row(TEXT_CONNECTED_TITLE, self.connected_count))
 
-        self.window_list = WindowListComponent()
+        self.window_list = CmmWindowList()
         layout.addWidget(self.window_list)
         layout.addLayout(self._build_attached_actions())
         return section

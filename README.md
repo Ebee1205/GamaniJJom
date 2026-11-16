@@ -67,37 +67,40 @@ Lock 적용을 보류합니다. 일반 창으로 복원되면 기존 사각형�
 
 ```text
 src/ui/
-  application.py                 서비스 생성과 최상위 Controller 연결
-  resources.py                   프로젝트 루트 QSS·SVG 로딩
-  wd/
-    floating_toolbar.py          FloatingToolbarWindow: 최상위 투명 창
-    settings.py                  SettingsWindow: 연결 관리 화면
-  dlg/
-    target_picker_dlg.py         TargetPickerDialog: 대상 선택·취소
-    position_dlg.py              PositionDialog: 좌표 입력·결과 표시
-  cmp/
-    button_cmp.py                ButtonComponent: 공통 아이콘 버튼
-    toolbar_cmp.py               ToolbarComponent: 핸들·버튼·더보기 메뉴
-    window_list_cmp.py           WindowListComponent: 재사용 목록·선택 유지
-    sys_tray_cmp.py              SystemTrayComponent: 트레이 표시·명령 신호
-  cntr/
-    toolbar_cntr.py              ToolbarController: 대상 1개·Lock·Capture·표시 정책
-    wd_size_cntr.py             WdSizeController: 목록·좌표 적용·결과 확인
-    tray_cntr.py                 TrayController: 앱 생명주기·연결 목록·트레이 명령
-src/services/toolbar_service.py  Win32 상태 조회·툴바 배치·마우스 선택
-resource/qss/theme.qss           외부 테마
-resource/icons/                 lock.svg / unlock.svg / capture.svg / more.svg
+  programs_window.py             ProgramsWindow: 프로그램 목록·연결 관리
+  cmm/
+    cmm_dialog.py                CmmDialog: 공통 확인 다이얼로그
+    cmm_dialog_layout.py         CmmDialogLayout: 공통 헤더·본문·푸터 슬롯
+    cmm_button.py                CmmButton: 공통 아이콘 버튼
+    cmm_window_list.py           CmmWindowList: 재사용 프로그램 목록
+  toolbar/
+    toolbar_window.py            ToolbarWindow: 최상위 투명 툴바 창
+    toolbar_widget.py            ToolbarWidget: 핸들·버튼·더보기 메뉴
+    toolbar_controller.py        ToolbarController: 대상·Lock·Capture·표시 정책
+  settings/
+    setting_dialog.py            SettingDialog: 별도 설정 팝업(QDialog)
+    settings_controller.py       SettingsController: 앱 설정 중개 골격
+  wd_size/
+    wd_size_dialog.py            WdSizeDialog: 좌표·크기 입력
+    wd_size_controller.py        WdSizeController: 프로그램 목록·좌표 적용·결과 확인
+  tray/
+    tray_widget.py               TrayWidget: 트레이 표시·명령 신호
+    tray_controller.py           TrayController: 앱 생명주기·연결·트레이 명령
+  application.py                DesktopController: 서비스 생성과 최상위 연결
+  resources.py                  프로젝트 루트 QSS·SVG 로딩
 ```
 
-View(`wd/dlg/cmp`)는 Qt와 모델만 사용합니다. UI 신호 → Controller → Service →
-기존 `adapters/windows` 순서로 호출하며 Controller도 Win32 API를 직접 import하지 않습니다.
-서비스는 Qt 위젯을 알지 못합니다. Windows API·기존 모델·설정 파일의 위치는 보존했습니다.
-인수인계의 `platform/models/config` 재배치는 권장안이므로 이번 UI 작업에 포함하지 않았습니다.
-
-구 `ui/floating_toolbar.py`, `main_window.py`, `tray.py`는 새 View 클래스를 가리키는
-이름 호환 모듈입니다. 옛 생성자·메서드·신호 API까지 보장하지 않습니다.
-새 코드는 위 구조의 클래스를 직접 import하세요. 구 Tkinter `ui/components`는
-기존 파일을 보존하기 위해 남겼으며 실행 경로에 포함되지 않습니다.
+`_window`는 독립 창, `_dialog`는 다이얼로그, `_widget`은 화면 부품,
+`_controller`는 화면과 서비스·설정을 연결합니다. 파일명에 대응하는 PascalCase
+클래스명을 사용합니다. 공통 부품은 `cmm_` / `Cmm` 접두사를 사용합니다.
+View는 Qt와 모델을 사용하고, UI 신호 → Controller → Service →
+`adapters/windows` 순서로 호출합니다. 서비스는 Qt 위젯을 알지 못합니다.
+기존 프로그램 목록 화면과 연결·좌표 처리는 유지합니다. 프로그램 목록은 시작 시 표시하며, 설정 팝업과 별개입니다. 트레이와 툴바의
+`설정…` 메뉴로 공통 다이얼로그 레이아웃을 사용하는 설정 팝업을 엽니다.
+현재 설정 팝업은 본문 슬롯과 닫기 동작을 갖춘 골격이며, 설정 편집·저장 UI는
+아직 연결하지 않았습니다. 설정창의 닫기·Esc는 앱을 종료하지 않습니다.
+이전 UI 모듈 경로는 제거했으며 `from src.ui...` 절대 import를 사용합니다.
+`__init__.py` 없이 프로젝트 루트를 기준으로 실행합니다.
 
 ## 구현 범위와 검증
 

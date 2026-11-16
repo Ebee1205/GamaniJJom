@@ -2,11 +2,13 @@
 from PySide6.QtCore import QObject, QTimer
 from PySide6.QtWidgets import QMessageBox, QSystemTrayIcon
 
-from src.ui.cmp.sys_tray_cmp import SystemTrayComponent
-from ui.cntr.wd_size_cntr import WdSizeController
-from src.ui.cntr.toolbar_cntr import ToolbarController
-from src.ui.wd.floating_toolbar import FloatingToolbarWindow
-from src.ui.dlg.common_dlg import CommonDialog
+from src.ui.tray.tray_widget import TrayWidget
+from src.ui.wd_size.wd_size_controller import WdSizeController
+from src.ui.toolbar.toolbar_controller import ToolbarController
+from src.ui.toolbar.toolbar_window import ToolbarWindow
+from src.ui.cmm.cmm_dialog import CmmDialog
+from ui.settings.setting_dialog import SettingDialog
+from src.ui.settings.settings_controller import SettingsController
 
 
 class TrayController(QObject):
@@ -21,15 +23,17 @@ class TrayController(QObject):
         self.capture = capture
         self.tracking = tracking
         self.controllers = {}
-        self.settings = WdSizeController(windows, attachments, self)
-        self.common_dlg = CommonDialog(self.settings.window, self.log)
+        self.programs = WdSizeController(windows, attachments, self)
+        self.settings = SettingsController(SettingDialog(self.programs.window), ctx, self)
+        self.common_dlg = CmmDialog(self.programs.window, self.log)
         self.common_dlg.rejected.connect(self.cancel_quit)
-        self.settings.target_requested.connect(self.attach)
-        self.settings.geometry_changed.connect(self.on_geometry_changed)
-        self.settings.notification.connect(self.notify)
-        self.settings.quit_requested.connect(self.request_quit)
-        self.tray = SystemTrayComponent(self)
+        self.programs.target_requested.connect(self.attach)
+        self.programs.geometry_changed.connect(self.on_geometry_changed)
+        self.programs.notification.connect(self.notify)
+        self.programs.quit_requested.connect(self.request_quit)
+        self.tray = TrayWidget(self)
         self.tray.attach_requested.connect(self.show_picker)
+        self.tray.programs_requested.connect(self.programs.show)
         self.tray.settings_requested.connect(self.settings.show)
         self.tray.connection_requested.connect(self.show_connection)
         self.tray.quit_requested.connect(self.request_quit)
@@ -55,17 +59,17 @@ class TrayController(QObject):
 
     def notify(self, message):
         self.log.debug("UI", f"<< Notification displayed length={len(message)}")
-        self.settings.window.status.setText(message)
+        self.programs.window.status.setText(message)
         self.tray.showMessage("GamaniJJom", message)
 
     def refresh_views(self):
-        self.settings.refresh()
+        self.programs.refresh()
         self.tray.set_connections(list(self.attachments.attachments.values()))
 
     def show_picker(self):
         if self.log is not None:
             self.log.debug("TRAY", f">> Target selection requested")
-        self.settings.show_picker()
+        self.programs.show_picker()
 
     def attach(self, target):
         if self.log is not None:
@@ -75,7 +79,7 @@ class TrayController(QObject):
         except (ValueError, OSError) as error:
             if self.log is not None:
                 self.log.debug("TRAY", f"<< UI operation ended error_type={type(error).__name__}")
-            self.settings.window.status.setText(str(error))
+            self.programs.window.status.setText(str(error))
             return
         key = attachment.target.identity
         attachment.hidden = False
@@ -83,9 +87,9 @@ class TrayController(QObject):
             controller = next(iter(self.controllers.values()))
             if controller.attachment.target.identity != key:
                 controller.window.toolbar.menu.hide()
-                self.settings.verify_timer.stop()
-                self.settings.pending = None
-                self.settings.position.hide()
+                self.programs.verify_timer.stop()
+                self.programs.pending = None
+                self.programs.position.hide()
                 controller.attachment = attachment
                 controller.window.setWindowTitle(f"GamaniJJom — {attachment.target.title}")
                 controller.sync()
@@ -94,11 +98,11 @@ class TrayController(QObject):
                 if self.log is not None:
                     self.log.debug("TRAY", f"!! Controller target changed hwnd={attachment.target.handle_text} pid={attachment.target.pid}")
         else:
-            window = FloatingToolbarWindow(attachment.target.title)
+            window = ToolbarWindow(attachment.target.title)
             controller = ToolbarController(window, attachment, self.locks, self.capture,
                                            self.tracking, self.windows, self)
             controller.notification.connect(self.notify)
-            controller.position_requested.connect(self.settings.show_position)
+            controller.position_requested.connect(self.programs.show_position)
             controller.settings_requested.connect(self.settings.show)
             controller.attach_requested.connect(self.show_picker)
             controller.detach_requested.connect(self.detach)
@@ -107,7 +111,7 @@ class TrayController(QObject):
             self.controllers[key] = controller
         self.refresh_views()
         self.controllers[key].update()
-        self.settings.window.window_list.select_identity(key)
+        self.programs.window.window_list.select_identity(key)
         self.notify("선택한 프로그램에 컨트롤러를 계속 표시합니다. 다른 프로그램을 연결하면 대상이 변경됩니다.")
 
     def detach(self, key):
@@ -158,7 +162,7 @@ class TrayController(QObject):
             return
         self._confirming_quit = False
         self._quit_confirmed = True
-        self.settings.window.exit_confirmed = True
+        self.programs.window.exit_confirmed = True
         if self.log is not None:
             self.log.debug("UI", "<< Exit confirmed")
         self.shutdown()
@@ -176,4 +180,5 @@ class TrayController(QObject):
         self.tray.menu.hide()
         for key in list(self.controllers):
             self.detach(key)
-        self.settings.shutdown()
+        self.settings.dispose()
+        self.programs.shutdown()

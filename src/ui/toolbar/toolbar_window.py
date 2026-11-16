@@ -2,10 +2,10 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QWidget
 
-from src.ui.cmp.toolbar_cmp import ToolbarComponent
+from src.ui.toolbar.toolbar_widget import ToolbarWidget
 
 
-class FloatingToolbarWindow(QWidget):
+class ToolbarWindow(QWidget):
     def __init__(self, title: str = "", parent=None):
         flags = (Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint
                  | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.WindowDoesNotAcceptFocus)
@@ -14,7 +14,7 @@ class FloatingToolbarWindow(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setWindowTitle(f"GamaniJJom — {title}")
-        self.toolbar = ToolbarComponent(self)
+        self.toolbar = ToolbarWidget(self)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.toolbar)

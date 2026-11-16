@@ -1,10 +1,10 @@
 """Connect settings window with app configuration and services."""
 from PySide6.QtCore import QObject, Signal
 
-from src.ui.wd.settings import SettingsWindow
+from ui.settings.setting_dialog import SettingDialog
 
 
-class SystemSettingsController(QObject):
+class SettingsController(QObject):
     """Handles configuration changes from the settings UI.
     
     Responsibilities:
@@ -18,7 +18,7 @@ class SystemSettingsController(QObject):
     notification = Signal(str)     # 사용자에게 알림 메시지
     closed = Signal()              # 설정 창이 닫혔음
 
-    def __init__(self, window: SettingsWindow, app_context, parent=None):
+    def __init__(self, window: SettingDialog, app_context, parent=None):
         super().__init__(parent)
         self.log = parent.ctx.log if parent is not None else None
         self.window = window
@@ -28,7 +28,16 @@ class SystemSettingsController(QObject):
         window.log = self.log
         
         # 시그널 연결
-        window.quit_requested.connect(self._on_window_close)
+        window.finished.connect(lambda result: self.closed.emit())
+
+    def show(self) -> None:
+        """Open the reusable settings popup without starting a nested event loop."""
+        if self.log is not None:
+            self.log.debug("SETTINGS", ">> Settings dialog requested")
+        if not self.window.isVisible():
+            self.window.show()
+        self.window.raise_()
+        self.window.activateWindow()
 
     def load_config(self) -> None:
         """Load current configuration from app context and display it."""
@@ -111,25 +120,9 @@ class SystemSettingsController(QObject):
                 self.log.debug("SETTINGS_CTR", f"!! Failed to save config: {e}")
             self.notification.emit(f"설정 저장 실패: {e}")
 
-    def _on_window_close(self) -> None:
-        """Handle settings window close event."""
-        if self.log is not None:
-            self.log.debug("SETTINGS_CTR", ">> Settings window close requested")
-        
-        # 저장되지 않은 변경사항이 있는지 확인
-        if self.ctx.cfg_handler.is_dirty:
-            if self.log is not None:
-                self.log.debug("SETTINGS_CTR", "!! Unsaved changes detected")
-            # 여기에 "저장하시겠습니까?" 대화상자 추가 가능
-            self.save()
-        
-        self.window.exit_confirmed = True
-        self.window.close()
-        self.closed.emit()
-
     def dispose(self) -> None:
         """Clean up resources."""
         if self.log is not None:
             self.log.debug("SETTINGS_CTR", "-- Settings controller disposed")
-        self.window.close()
+        self.window.reject()
         self.deleteLater()

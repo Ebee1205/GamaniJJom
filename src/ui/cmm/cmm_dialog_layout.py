@@ -38,7 +38,7 @@ class _Slot:
         self.container.setVisible(widget is not None)
 
 
-class DialogLayout(QFrame):
+class CmmDialogLayout(QFrame):
     """Use set_title(text), set_body(form_widget), and set_footer(actions_widget).
 
     Connect close_requested to the owning dialog's reject method. The template

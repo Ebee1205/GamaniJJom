@@ -2,7 +2,7 @@
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QMenu
 
-from src.ui.cmp.button_cmp import ButtonComponent
+from src.ui.cmm.cmm_button import CmmButton
 
 
 class DragHandle(QLabel):
@@ -39,7 +39,7 @@ class DragHandle(QLabel):
         super().mouseReleaseEvent(event)
 
 
-class ToolbarComponent(QFrame):
+class ToolbarWidget(QFrame):
     lock_requested = Signal()
     capture_requested = Signal()
     position_requested = Signal()
@@ -62,9 +62,9 @@ class ToolbarComponent(QFrame):
         self.handle = DragHandle(self)
         self.handle.dragged.connect(self.dragged.emit)
         layout.addWidget(self.handle)
-        self.lock_button = ButtonComponent("unlock", "현재 위치·크기 고정", self, checkable=True)
-        self.capture_button = ButtonComponent("capture", "화면 캡처 · 준비 중", self)
-        self.more_button = ButtonComponent("more", "더보기", self)
+        self.lock_button = CmmButton("unlock", "현재 위치·크기 고정", self, checkable=True)
+        self.capture_button = CmmButton("capture", "화면 캡처 · 준비 중", self)
+        self.more_button = CmmButton("more", "더보기", self)
         self.lock_button.clicked.connect(lambda: self.lock_requested.emit())
         self.lock_button.secondary_requested.connect(self.position_requested.emit)
         self.capture_button.clicked.connect(self.capture_requested.emit)
@@ -76,6 +76,7 @@ class ToolbarComponent(QFrame):
         self.menu.aboutToHide.connect(lambda: self.log.debug("TOOLBAR", "<< More menu closed") if self.log is not None else None)
         for text, signal in (
             ("프로그램 목록…", self.attach_requested),
+            ("설정…", self.settings_requested),
             ("위치·크기 설정…", self.position_requested),
             ("부착 위치 초기화", self.reset_requested),
         ):

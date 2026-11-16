@@ -5,7 +5,7 @@ from PySide6.QtWidgets import QToolButton
 from src.ui.resources import icon
 
 
-class ButtonComponent(QToolButton):
+class CmmButton(QToolButton):
     secondary_requested = Signal()
 
     def __init__(self, name: str, label: str, parent=None, *, checkable=False):

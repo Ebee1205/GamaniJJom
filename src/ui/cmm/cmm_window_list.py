@@ -3,7 +3,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QAbstractItemView, QHeaderView, QTreeWidget, QTreeWidgetItem
 
 
-class WindowListComponent(QTreeWidget):
+class CmmWindowList(QTreeWidget):
     selection_changed = Signal(object)
     window_activated = Signal(object)
 

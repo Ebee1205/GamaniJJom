@@ -7,12 +7,12 @@ from PySide6.QtWidgets import (
 )
 
 from src.models.window_schema import WindowRect
-from src.ui.cmp.layout.dialog_layout import DialogLayout
+from src.ui.cmm.cmm_dialog_layout import CmmDialogLayout
 
 TITLE_MAX_WIDTH = 220
 
 
-class PositionDialog(QDialog):
+class WdSizeDialog(QDialog):
     apply_requested = Signal(object)
 
     def __init__(self, parent=None):
@@ -27,7 +27,7 @@ class PositionDialog(QDialog):
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
-        self.surface = DialogLayout(self)
+        self.surface = CmmDialogLayout(self)
         outer.addWidget(self.surface)
         self.title_bar = self.surface.header
         self.title = self.surface.title_label
