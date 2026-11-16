@@ -36,3 +36,22 @@ QMenu { background: #242c37; border: 1px solid #4c586a; padding: 5px; }
 QMenu::item { padding: 8px 20px; border-radius: 4px; }
 QMenu::item:selected { background: #3a4b60; }
 QMenu::separator { height: 1px; background: #435064; margin: 4px 8px; }
+
+/* ---- PositionDialog ---- */
+QDialog#positionDialog { background: transparent; }
+QFrame#dialogSurface {
+    background: rgba(30, 35, 43, 245);
+    border: 1px solid #46505f;
+    border-radius: 9px;
+}
+QLabel#dialogTitle { font-size: 12px; font-weight: 600; color: #e5e9f0; }
+QLabel#fieldLabel { color: #929cab; font-size: 11px; font-weight: 600; }
+QToolButton#closeButton {
+    background: transparent; border: none; border-radius: 5px;
+    color: #929cab; padding: 2px 6px; font-size: 11px;
+}
+QToolButton#closeButton:hover { background: #394353; color: #e5e9f0; }
+QToolButton#closeButton:pressed { background: #536277; }
+QLineEdit#compactField { padding: 4px 6px; }
+QDialog#positionDialog QPushButton { padding: 4px 14px; }
+QDialog#positionDialog QLabel#status { font-size: 11px; }
