@@ -5,15 +5,14 @@ The copyright of this software belongs to Ebee1205(wavicle).
 All rights reserved.
 """
 
-# app_context.py
 import logging
-import orjson
-
-from pydantic import BaseModel
-from typing import Any
 from typing import Optional
 
+from pydantic import BaseModel
+
 from src.modules import logger
+from src.modules.config_handler import ConfigHandler
+
 
 class LoggerConfig(BaseModel):
     level: str
@@ -24,51 +23,74 @@ class LoggerConfig(BaseModel):
     rotation: str
     use_console: bool
 
+
 class AppConfig(BaseModel):
-    # 상위 항목 직접 정의
     environment: str
     project_name: str
-    save_path: str
-    
-    # 구성 요소들
     logger: LoggerConfig
+
 
 class AppContext:
     def __init__(self):
         self.cfg: Optional[AppConfig] = None
+        self.cfg_handler: Optional[ConfigHandler[AppConfig]] = None
         self.log = None
 
     def load_config(self, path: str) -> AppConfig:
-        """JSON 파일을 로드하고 AppConfig 모델로 파싱"""
+        """Load and validate configuration from JSON file."""
         print("+ start load cfg")
-
-        with open(path, "rb") as f:
-            # 윈도우 메모장이 붙이는 UTF-8 BOM 제거 (orjson은 BOM 불가)
-            raw = orjson.loads(f.read().lstrip(b"\xef\xbb\xbf"))
-
+        
+        handler = ConfigHandler(path, AppConfig)
+        self.cfg = handler.load()          # 실패하면 예외처리
+        self.cfg_handler = handler
+            
         print("- end load cfg")
-        self.cfg = AppConfig(**raw)
         return self.cfg
 
-    def load_json_map(self, name: str, path: str):
-        """
-        임의의 JSON 파일을 로드하여 ctx에 동적으로 등록
-        예: ctx.load_json_map("event_map", "config/event_map.json")
-        → self.event_map 로 저장됨
-        """
+    def get_config_value(self, key: str, default=None):
+        """Get a configuration value by dot-separated path. Example: get_config_value("logger.level")"""
+        if self.cfg_handler is None:
+            raise RuntimeError("Configuration not loaded yet. Call load_config() first.")
+        return self.cfg_handler.get(key, default)
+
+    def set_config_value(self, key: str, value) -> AppConfig:
+        self.log.info(f"+ set cfg {key} = {value}")
+        """Set a configuration value. Changes are in-memory only until save_config() is called."""
+        if self.cfg_handler is None:
+            raise RuntimeError("Configuration not loaded yet. Call load_config() first.")
+        self.cfg = self.cfg_handler.set(key, value)
+        return self.cfg
+
+    def update_config(self, changes: dict) -> AppConfig:
+        """Update multiple configuration values at once."""
+        self.log.info("+ update cfg")
+        if self.cfg_handler is None:
+            raise RuntimeError("Configuration not loaded yet. Call load_config() first.")
+        self.cfg = self.cfg_handler.update(changes)
+        return self.cfg
+
+    def save_config(self) -> None:
+        self.log.info("+ save cfg")
+        """Save current configuration to file."""
+        if self.cfg_handler is None:
+            raise RuntimeError("Configuration not loaded yet. Call load_config() first.")
+        self.cfg_handler.save()
+
+    def load_json_map(self, name: str, path: str) -> bool:
+        """Load arbitrary JSON file and register it dynamically on context."""
         try:
+            import orjson
             with open(path, "rb") as f:
                 data = orjson.loads(f.read().lstrip(b"\xef\xbb\xbf"))
-
             setattr(self, name, data)
             print(f"> loaded JSON map '{name}' from {path}")
             return True
-
         except Exception as e:
             print(f"!! failed to load JSON map '{name}' from {path}: {e}")
             return False
 
     def _init_logger(self):
+        """Initialize application logger from configuration."""
         print("+ start init logger")
 
         if self.cfg is None:
@@ -82,8 +104,7 @@ class AppContext:
         self.log.debug("- end init logger")
 
     def shutdown(self):
-        """종료 정리"""
+        """Cleanup on application exit."""
         if self.log is not None:
             self.log.info("APP", "Application stopped")
-
         logging.shutdown()
