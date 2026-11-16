@@ -118,7 +118,7 @@ class ToolbarController(QObject):
             except (ValueError, OSError) as error:
                 if self.log is not None:
                     self.log.debug("TOOLBAR", f"<< UI operation ended error_type={type(error).__name__}")
-                self.attachment.locked_rect = None
+                self.locks.release(self.attachment)
                 self.notification.emit(f"Lock 해제: {error}")
         self.sync()
         if previous != (self.attachment.target.title, self.attachment.locked_rect):
@@ -142,7 +142,7 @@ class ToolbarController(QObject):
     def dispose(self):
         if self.log is not None:
             self.log.debug("TOOLBAR", f"-- Toolbar disposed")
-        self.attachment.locked_rect = None
+        self.locks.release(self.attachment)
         self.window.toolbar.menu.hide()
         self.window.hide()
         self.window.close()
