@@ -4,16 +4,16 @@ from collections.abc import Callable
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog,
-    QFrame,
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QToolButton,
     QVBoxLayout,
+    QWidget,
 )
 
+from src.ui.cmp.layout.dialog_layout import DialogLayout
+
 DIALOG_WIDTH = 300
-SURFACE_MARGINS = (14, 10, 14, 14)
 
 
 class CommonDialog(QDialog):
@@ -36,38 +36,18 @@ class CommonDialog(QDialog):
         root.addWidget(self._build_surface())
 
     # ------------------------------------------------------------------
-    # UI 구성 (PositionDialog와 같은 스타일 id를 사용한다)
+    # 공통 카드 템플릿에 본문과 버튼 위젯을 넣는다.
     # ------------------------------------------------------------------
-    def _build_surface(self) -> QFrame:
-        surface = QFrame(self)
-        surface.setObjectName("dialogSurface")
-        content = QVBoxLayout(surface)
-        content.setContentsMargins(*SURFACE_MARGINS)
-        content.setSpacing(8)
-        content.addLayout(self._build_header())
-        content.addWidget(self._build_text_label())
-        content.addLayout(self._build_buttons())
-        self.surface = surface
-        return surface
-
-    def _build_header(self) -> QHBoxLayout:
-        """제목(왼쪽) + 닫기 버튼(오른쪽)."""
-        self.title_label = QLabel()
-        self.title_label.setObjectName("dialogTitle")
-        self.title_label.setTextFormat(Qt.TextFormat.PlainText)
-        self.title_label.setWordWrap(True)
-
-        self.close_button = QToolButton()
-        self.close_button.setObjectName("closeButton")
-        self.close_button.setText("✕")
-        self.close_button.setAccessibleName("닫기")
-        self.close_button.setToolTip("닫기")
-        self.close_button.clicked.connect(self.reject)
-
-        header = QHBoxLayout()
-        header.addWidget(self.title_label, 1)
-        header.addWidget(self.close_button, 0, Qt.AlignmentFlag.AlignTop)
-        return header
+    def _build_surface(self) -> DialogLayout:
+        self.surface = DialogLayout(self)
+        self.surface.close_requested.connect(self.reject)
+        self.title_label = self.surface.title_label
+        self.close_button = self.surface.close_button
+        self.surface.set_body(self._build_text_label())
+        footer = QWidget()
+        footer.setLayout(self._build_buttons())
+        self.surface.set_footer(footer)
+        return self.surface
 
     def _build_text_label(self) -> QLabel:
         self.text_label = QLabel()
@@ -86,6 +66,7 @@ class CommonDialog(QDialog):
         self.confirm_button.clicked.connect(self.accept)
 
         buttons = QHBoxLayout()
+        buttons.setContentsMargins(0, 0, 0, 0)
         buttons.setSpacing(6)
         buttons.addStretch()
         buttons.addWidget(self.cancel_button)
@@ -125,7 +106,7 @@ class CommonDialog(QDialog):
 
         self.setResult(QDialog.DialogCode.Rejected)
         self.setWindowTitle(title)
-        self.title_label.setText(title)
+        self.surface.set_title(title)
         self.text_label.setText(text)
         self._apply_button_mode()
 

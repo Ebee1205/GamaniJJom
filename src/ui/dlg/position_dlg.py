@@ -2,11 +2,12 @@
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFontMetrics, QIntValidator
 from PySide6.QtWidgets import (
-    QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QToolButton, QVBoxLayout, QWidget,
+    QDialog, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
+    QPushButton, QVBoxLayout, QWidget,
 )
 
 from src.models.window_schema import WindowRect
+from src.ui.cmp.layout.dialog_layout import DialogLayout
 
 TITLE_MAX_WIDTH = 220
 
@@ -26,32 +27,18 @@ class PositionDialog(QDialog):
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
-        surface = QFrame()
-        surface.setObjectName("dialogSurface")
-        outer.addWidget(surface)
-        layout = QVBoxLayout(surface)
-        layout.setContentsMargins(12, 8, 12, 12)
-        layout.setSpacing(10)
-
-        # Title bar (drag area)
-        self.title_bar = QWidget()
-        bar = QHBoxLayout(self.title_bar)
-        bar.setContentsMargins(0, 0, 0, 0)
-        bar.setSpacing(6)
-        self.title = QLabel("위치·크기")
-        self.title.setObjectName("dialogTitle")
-        bar.addWidget(self.title, 1)
-        close = QToolButton()
-        close.setObjectName("closeButton")
-        close.setText("✕")
-        close.setAccessibleName("닫기")
-        close.setCursor(Qt.PointingHandCursor)
-        close.clicked.connect(self.reject)
-        bar.addWidget(close)
-        layout.addWidget(self.title_bar)
+        self.surface = DialogLayout(self)
+        outer.addWidget(self.surface)
+        self.title_bar = self.surface.header
+        self.title = self.surface.title_label
+        self.close_button = self.surface.close_button
+        self.surface.set_title("위치·크기")
+        self.surface.close_requested.connect(self.reject)
 
         # Inputs: [X] [Y] / [W] [H]
-        grid = QGridLayout()
+        body = QWidget()
+        grid = QGridLayout(body)
+        grid.setContentsMargins(0, 0, 0, 0)
         grid.setHorizontalSpacing(6)
         grid.setVerticalSpacing(6)
         grid.setColumnStretch(1, 1)
@@ -75,10 +62,12 @@ class PositionDialog(QDialog):
             row, column = divmod(index, 2)
             grid.addWidget(label, row, column * 2)
             grid.addWidget(field, row, column * 2 + 1)
-        layout.addLayout(grid)
+        self.surface.set_body(body)
 
         # Status + apply
-        footer = QHBoxLayout()
+        footer_widget = QWidget()
+        footer = QHBoxLayout(footer_widget)
+        footer.setContentsMargins(0, 0, 0, 0)
         footer.setSpacing(8)
         self.status = QLabel()
         self.status.setObjectName("status")
@@ -90,16 +79,7 @@ class PositionDialog(QDialog):
         self.apply_button.setDefault(True)
         self.apply_button.clicked.connect(self.request_apply)
         footer.addWidget(self.apply_button, 0, Qt.AlignBottom)
-        layout.addLayout(footer)
-
-    # --- drag by title bar -------------------------------------------------
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton and self.title_bar.geometry().contains(event.position().toPoint()):
-            handle = self.windowHandle()
-            if handle is not None:
-                handle.startSystemMove()
-                return
-        super().mousePressEvent(event)
+        self.surface.set_footer(footer_widget)
 
     # --- public API (unchanged) --------------------------------------------
     def set_target(self, target):

@@ -37,67 +37,23 @@ QMenu::item { padding: 8px 20px; border-radius: 4px; }
 QMenu::item:selected { background: #3a4b60; }
 QMenu::separator { height: 1px; background: #435064; margin: 4px 8px; }
 
-/* ---- PositionDialog ---- */
-QDialog#positionDialog { background: transparent; }
+/* ---- Shared dialog template: header / body / footer ---- */
+QDialog#positionDialog, QDialog#commonDialog { background: transparent; }
 QFrame#dialogSurface {
     background: rgba(30, 35, 43, 245);
     border: 1px solid #46505f;
     border-radius: 9px;
 }
+QWidget#dialogHeader { background: transparent; }
 QLabel#dialogTitle { font-size: 12px; font-weight: 600; color: #e5e9f0; }
-QLabel#fieldLabel { color: #929cab; font-size: 11px; font-weight: 600; }
 QToolButton#closeButton {
     background: transparent; border: none; border-radius: 5px;
-    color: #929cab; padding: 2px 6px; font-size: 11px;
+    color: #929cab; padding: 0; font-size: 11px;
 }
 QToolButton#closeButton:hover { background: #394353; color: #e5e9f0; }
 QToolButton#closeButton:pressed { background: #536277; }
+QLabel#fieldLabel { color: #929cab; font-size: 11px; font-weight: 600; }
 QLineEdit#compactField { padding: 4px 6px; }
-QDialog#positionDialog QPushButton { padding: 4px 14px; }
+QDialog#positionDialog QPushButton, QDialog#commonDialog QPushButton { padding: 4px 14px; }
 QDialog#positionDialog QLabel#status { font-size: 11px; }
-
-/* ---- CommonDialog: reusable confirmation / acknowledgement card ---- */
-QDialog#commonDialog { background: transparent; }
-QFrame#commonDialogSurface {
-    background: #ffffff;
-    border-radius: 24px;
-}
-QLabel#commonDialogTitle {
-    color: #101828;
-    font-size: 20px;
-    font-weight: 400;
-    background: transparent;
-}
-QLabel#commonDialogText {
-    color: #6a7282;
-    font-size: 14px;
-    font-weight: 400;
-    background: transparent;
-}
-QToolButton#commonDialogClose {
-    background: transparent;
-    border: none;
-    border-radius: 14px;
-    color: #6b7280;
-    font-size: 22px;
-    padding: 0;
-}
-QToolButton#commonDialogClose:hover { background: #f3f4f6; }
-QPushButton#commonDialogConfirm, QPushButton#commonDialogCancel {
-    color: #101828;
-    background: #ffffff;
-    border: 1px solid #cbd5e1;
-    border-radius: 16px;
-    padding: 8px 16px;
-}
-QPushButton#commonDialogConfirm:hover { background: #f3f4f6; }
-QPushButton#commonDialogConfirm:pressed { background: #e5e7eb; }
-QPushButton#commonDialogConfirm:focus { border-color: #475467; }
-QPushButton#commonDialogCancel:hover { background: #f3f4f6; }
-QPushButton#commonDialogCancel:pressed { background: #e5e7eb; }
-QPushButton#commonDialogCancel:focus { border-color: #475467; }
-
-/* ---- CommonDialog: PositionDialog와 같은 카드 스타일(dialogSurface/dialogTitle/closeButton) 재사용 ---- */
-QDialog#commonDialog { background: transparent; }
 QLabel#commonDialogText { color: #a4b0c0; font-size: 12px; background: transparent; }
-QDialog#commonDialog QPushButton { padding: 4px 14px; }
