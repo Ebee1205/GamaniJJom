@@ -3,9 +3,9 @@ import tkinter as tk
 from tkinter import ttk
 from collections.abc import Callable
 
-from ui.components.cmp_buttons import RefreshButton
+from src.ui.components.cmp_buttons import RefreshButton
 from src.ui.components.geometry_editor import GeometryEditor
-from ui.components.cmp_table import CmpTable
+from src.ui.components.cmp_table import CmpTable
 
 TITLE_FONT = ("맑은 고딕", 17, "bold")
 HINT_TEXT = ("화면 픽셀·창 바깥 테두리 기준 / 음수 X·Y 지원 / "

@@ -9,10 +9,8 @@ import argparse
 import os
 import sys
 import traceback
-from contextlib import suppress
 from enum import IntEnum
 from pathlib import Path
-from tkinter import TclError
 
 # python src/main.py 와 python -m src.main 실행 방식을 모두 지원한다.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -41,6 +39,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Path to cfg JSON (default: src/config/gamani-jjom.cfg.json, "
         "or env GAMANI_CONFIG)",
     )
+    parser.add_argument("--smoke-test", action="store_true",
+                        help="Open Qt picker/tray and quit after 1.2 seconds")
     args = parser.parse_args(argv)
 
     if sys.platform != "win32":
@@ -83,37 +83,44 @@ def run(ctx, args: argparse.Namespace) -> ExitCode:
         f"Initializing {cfg.project_name} (env={cfg.environment}, cfg={args.cfg})",
     )
 
-    from src.ui.main_window import MainWindow  # --check 에서 임포트 오류도 검출
+    from PySide6.QtCore import QTimer
+    from PySide6.QtWidgets import QApplication
+    from src.ui.application import DesktopController
 
     if args.check:
         run_log_selftest(ctx.log)
-        ctx.log.info("APP", f"Environment check passed: Python {sys.version.split()[0]}")
-        print("Configuration, logger and imports OK (GUI display not tested).")
+        print("Configuration, logger, PySide6 and Win32 imports OK (GUI not tested).")
         return ExitCode.OK
 
     from src.adapters.windows.window_api import enable_dpi_awareness
 
     enable_dpi_awareness()
-    app = MainWindow()
-    app.ctx = ctx
+    app = QApplication([sys.argv[0]])
+    app.setApplicationName("GamaniJJom")
+    app.setQuitOnLastWindowClosed(False)
 
-    def report_callback_exception(exc_type, exc_value, exc_tb):
-        ctx.log.error(
-            "UI", "Unhandled GUI callback exception", exc_info=(exc_type, exc_value, exc_tb)
-        )
+    callback_failed = False
 
-    app.report_callback_exception = report_callback_exception
+    def report_exception(exc_type, exc_value, exc_tb):
+        nonlocal callback_failed
+        callback_failed = True
+        ctx.log.error("UI", "Unhandled Qt callback exception",
+                      exc_info=(exc_type, exc_value, exc_tb))
 
+    previous_hook = sys.excepthook
+    sys.excepthook = report_exception
+    controller = DesktopController(app, ctx)
     try:
-        ctx.log.info("APP", "Application started")
-        app.mainloop()
-
+        if not controller.start():
+            return ExitCode.FAILURE
+        if args.smoke_test:
+            QTimer.singleShot(1200, app.quit)
+        ctx.log.info("APP", "Qt application started")
+        result = app.exec()
+        return ExitCode.OK if result == 0 and not callback_failed else ExitCode.FAILURE
     finally:
-        # quit()은 창을 남겨두며, destroy()는 이미 실행됐을 수 있다.
-        with suppress(TclError):
-            app.destroy()
-
-    return ExitCode.OK
+        controller.shutdown()
+        sys.excepthook = previous_hook
 
 
 def main(argv: list[str] | None = None) -> int:

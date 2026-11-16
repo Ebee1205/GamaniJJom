@@ -4,7 +4,7 @@ from tkinter import ttk
 from collections.abc import Callable
 
 from src.models.window_schema import WindowInfo, WindowRect
-from ui.components.cmp_buttons import ApplyButton
+from src.ui.components.cmp_buttons import ApplyButton
 
 PLACEHOLDER_TEXT = "목록에서 창을 선택하세요."
 RECT_FIELDS = (("x", "X"), ("y", "Y"), ("width", "너비"), ("height", "높이"))

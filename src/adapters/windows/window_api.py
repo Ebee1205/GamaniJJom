@@ -51,7 +51,7 @@ def _last_error() -> OSError:
 
 
 def enable_dpi_awareness() -> None:
-    """Call before creating Tk windows. Respect awareness already set by a host."""
+    """Call before QApplication. Respect awareness already set by a host."""
     try:
         set_context = _bind(user32, "SetProcessDpiAwarenessContext", [wt.HANDLE], wt.BOOL)
         set_context(ctypes.c_void_p(window_enum.DpiAwarenessContext.PER_MONITOR_AWARE_V2))
@@ -119,3 +119,65 @@ def set_rect(hwnd: int, rect: window_schema.WindowRect) -> None:
         hwnd, None, rect.x, rect.y, rect.width, rect.height, int(MOVE_FLAGS)
     ):
         raise _last_error()
+
+
+_get_foreground = _bind(user32, "GetForegroundWindow", [], wt.HWND)
+_get_ancestor = _bind(user32, "GetAncestor", [wt.HWND, wt.UINT], wt.HWND)
+_window_from_point = _bind(user32, "WindowFromPoint", [wt.POINT], wt.HWND)
+_get_cursor_pos = _bind(user32, "GetCursorPos", [ctypes.POINTER(wt.POINT)], wt.BOOL)
+_get_async_key_state = _bind(user32, "GetAsyncKeyState", [ctypes.c_int], wt.SHORT)
+
+
+def foreground_window() -> int:
+    return int(_get_foreground() or 0)
+
+
+def is_minimized(hwnd: int) -> bool:
+    return bool(_is_iconic(hwnd))
+
+
+def is_maximized(hwnd: int) -> bool:
+    return bool(_is_zoomed(hwnd))
+
+
+def is_visible(hwnd: int) -> bool:
+    return bool(_is_window_visible(hwnd)) and not _is_cloaked(hwnd)
+
+
+def key_down(key: int) -> bool:
+    return bool(_get_async_key_state(key) & 0x8000)
+
+
+def window_at_cursor() -> int:
+    point = wt.POINT()
+    if not _get_cursor_pos(ctypes.byref(point)):
+        raise _last_error()
+    hwnd = _window_from_point(point)
+    return int(_get_ancestor(hwnd, 2) or hwnd or 0)  # GA_ROOT
+
+
+def place_toolbar(hwnd: int, x: int, y: int) -> None:
+    """Native pixels avoid mixing Qt logical coordinates on mixed DPI monitors."""
+    flags = int(MOVE_FLAGS) | 0x0001  # SWP_NOSIZE
+    if not _set_window_pos(hwnd, None, x, y, 0, 0, flags):
+        raise _last_error()
+
+
+class MonitorInfo(ctypes.Structure):
+    _fields_ = [("size", wt.DWORD), ("monitor", wt.RECT), ("work", wt.RECT),
+                ("flags", wt.DWORD)]
+
+
+_monitor_from_window = _bind(user32, "MonitorFromWindow", [wt.HWND, wt.DWORD], wt.HANDLE)
+_get_monitor_info = _bind(user32, "GetMonitorInfoW",
+                         [wt.HANDLE, ctypes.POINTER(MonitorInfo)], wt.BOOL)
+
+
+def monitor_bounds(hwnd: int, *, work: bool = True) -> window_schema.WindowRect:
+    info = MonitorInfo()
+    info.size = ctypes.sizeof(info)
+    monitor = _monitor_from_window(hwnd, 2)  # MONITOR_DEFAULTTONEAREST
+    if not _get_monitor_info(monitor, ctypes.byref(info)):
+        raise _last_error()
+    r = info.work if work else info.monitor
+    return window_schema.WindowRect(r.left, r.top, r.right - r.left, r.bottom - r.top)

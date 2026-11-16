@@ -21,6 +21,9 @@ def _validate_rect(rect: WindowRect) -> None:
 
 
 class WindowService:
+    def is_suspended(self, target: WindowInfo) -> bool:
+        return window_api.is_minimized(target.hwnd) or window_api.is_maximized(target.hwnd)
+
     def list_windows(self) -> list[WindowInfo]:
         return window_finder.find_windows(excluded_pid=os.getpid())
 

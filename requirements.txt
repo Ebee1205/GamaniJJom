@@ -1,3 +1,4 @@
-# Tkinter and ctypes are included with Python. Existing configuration dependencies:
+# PySide6 controller and existing configuration dependencies.
+PySide6>=6.8,<7
 orjson>=3.13,<4
 pydantic>=2.14,<3
