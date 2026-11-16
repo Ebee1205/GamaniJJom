@@ -84,7 +84,7 @@ def run(ctx, args: argparse.Namespace) -> ExitCode:
         f"Initializing {cfg.project_name} (env={cfg.environment}, cfg={args.cfg})",
     )
 
-    from PySide6.QtCore import QTimer
+    from PySide6.QtCore import QTimer, QCoreApplication
     from PySide6.QtWidgets import QApplication
     from src.ui.application import DesktopController
 
@@ -117,9 +117,17 @@ def run(ctx, args: argparse.Namespace) -> ExitCode:
         if not controller.start():
             return ExitCode.FAILURE
         
+        shutdown_requested = False
+        
         def handle_signal(signum, frame):
+            nonlocal shutdown_requested
+            if shutdown_requested:
+                ctx.log.warning("APP", "Force quit (signal received multiple times)")
+                import os
+                os._exit(0)
+            shutdown_requested = True
             ctx.log.info("APP", f"Received signal {signum}, shutting down...")
-            app.quit()
+            QCoreApplication.quit()
         
         signal.signal(signal.SIGINT, handle_signal)
         signal.signal(signal.SIGTERM, handle_signal)

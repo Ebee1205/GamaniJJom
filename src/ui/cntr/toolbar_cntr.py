@@ -143,5 +143,5 @@ class ToolbarController(QObject):
         self.attachment.locked_rect = None
         self.window.toolbar.menu.hide()
         self.window.hide()
-        self.window.deleteLater()
+        self.window.close()
         self.deleteLater()

@@ -159,3 +159,4 @@ class SettingsController(QObject):
         self.pending = None
         for window in (self.window, self.position):
             window.hide()
+            window.close()
