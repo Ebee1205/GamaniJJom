@@ -11,5 +11,15 @@
     "rotation": "midnight",
     "use_console": true
   },
-  "save_path": "D:/saves/"
+  "save": {
+    "path": "D:/saves/",
+    "scale": 1,
+    "notification_enabled": true,
+    "copy_to_clipboard": true,
+    "filename": {
+      "prefix": "capture_",
+      "postfix_date_enabled": true,
+      "postfix_date_format": "%Y%m%d_%H%M%S_%f"
+    }
+  }
 }

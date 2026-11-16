@@ -6,9 +6,9 @@ All rights reserved.
 """
 
 import logging
-from typing import Optional
+from typing import Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.modules import logger
 from src.modules.config_handler import ConfigHandler
@@ -24,12 +24,25 @@ class LoggerConfig(BaseModel):
     use_console: bool
 
 
+class FilenameConfig(BaseModel):
+    prefix: str = "capture_"
+    postfix_date_enabled: bool = True
+    postfix_date_format: str = "%Y%m%d_%H%M%S_%f"
+
+
+class SaveConfig(BaseModel):
+    path: str
+    scale: Literal[1, 2, 3] = 1
+    notification_enabled: bool = True
+    copy_to_clipboard: bool = True
+    filename: FilenameConfig = Field(default_factory=FilenameConfig)
+
+
 class AppConfig(BaseModel):
     environment: str
     project_name: str
-    save_path: str
-    
     logger: LoggerConfig
+    save: SaveConfig
 
 
 class AppContext:
