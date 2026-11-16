@@ -1,10 +1,10 @@
-"""Settings popup: left navigation tree + right page stack (IntelliJ style)."""
+"""Settings popup: category pages containing scrollable child sections."""
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -15,8 +15,10 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QLayout,
     QPushButton,
     QStackedWidget,
+    QScrollArea,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -29,7 +31,7 @@ DIALOG_SIZE = (760, 520)
 DIALOG_MIN_SIZE = (640, 440)
 NAV_WIDTH = 190
 
-PAGE_INDEX_ROLE = Qt.ItemDataRole.UserRole       # 트리 항목 -> 페이지 번호
+SECTION_INDEX_ROLE = Qt.ItemDataRole.UserRole    # 트리 항목 -> 섹션 번호
 SEARCH_TEXT_ROLE = Qt.ItemDataRole.UserRole + 1  # 트리 항목 -> 검색용 문자열
 
 
@@ -40,6 +42,20 @@ class _Field:
     get: Callable[[], Any]
     set: Callable[[Any], None]
     initial: Any = None  # 마지막으로 불러오거나 적용한 값 (변경 감지용)
+
+
+@dataclass
+class _Group:
+    scroll: QScrollArea
+    content: QWidget
+    layout: QVBoxLayout
+
+
+@dataclass
+class _Section:
+    group: _Group
+    widget: QWidget
+    breadcrumb: str
 
 
 class SettingDialog(QDialog):
@@ -57,7 +73,7 @@ class SettingDialog(QDialog):
         super().__init__(parent)
         self.log = None
         self._fields: dict[str, _Field] = {}
-        self._breadcrumbs: dict[int, str] = {}  # 페이지 번호 -> "저장 › 파일명"
+        self._sections: list[_Section] = []
 
         self._setup_window()
         self.surface = CmmDialogLayout(self)
@@ -116,6 +132,7 @@ class SettingDialog(QDialog):
         self.nav.setRootIsDecorated(False)  # 화살표 없이 들여쓰기만 (항상 펼침)
         self.nav.setIndentation(16)
         self.nav.currentItemChanged.connect(self._on_nav_changed)
+        self.nav.itemClicked.connect(lambda item, column: self._scroll_to_section(item))
         layout.addWidget(self.nav, 1)
         return pane
 
@@ -173,12 +190,45 @@ class SettingDialog(QDialog):
         self.nav.setCurrentItem(self.nav.topLevelItem(0))
 
     def _add_page(self, title: str, page: QWidget, parent: QTreeWidgetItem | None = None):
-        """페이지를 스택에 넣고, 메뉴 트리에 항목을 만든다."""
-        index = self.stack.addWidget(page)
+        """상위 항목은 스크롤 페이지, 하위 항목은 같은 페이지의 섹션이다."""
+        if parent is None:
+            scroll = QScrollArea()
+            scroll.setObjectName("settingsScroll")
+            scroll.viewport().setObjectName("settingsViewport")
+            scroll.setFrameShape(QFrame.Shape.NoFrame)
+            scroll.setWidgetResizable(True)
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            content = QWidget()
+            content.setObjectName("settingsContent")
+            layout = QVBoxLayout(content)
+            layout.setContentsMargins(0, 0, 12, 0)
+            layout.setSpacing(24)
+            layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
+            layout.addStretch()
+            scroll.setWidget(content)
+            self.stack.addWidget(scroll)
+            group = _Group(scroll, content, layout)
+            breadcrumb = title
+        else:
+            parent_section = self._sections[parent.data(0, SECTION_INDEX_ROLE)]
+            group = parent_section.group
+            breadcrumb = f"{parent_section.breadcrumb} › {title}"
+
+        section = QWidget()
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+        heading = QLabel(title if parent is not None else "일반")
+        heading.setObjectName("pageTitle")
+        layout.addWidget(heading)
+        layout.addWidget(page)
+        group.layout.insertWidget(group.layout.count()-1, section)
+
+        index = len(self._sections)
+        self._sections.append(_Section(group, section, breadcrumb))
         item = QTreeWidgetItem(parent or self.nav, [title])
-        item.setData(0, PAGE_INDEX_ROLE, index)
+        item.setData(0, SECTION_INDEX_ROLE, index)
         item.setData(0, SEARCH_TEXT_ROLE, self._search_text(title, page))
-        self._breadcrumbs[index] = f"{parent.text(0)} › {title}" if parent else title
         return item
 
     @staticmethod
@@ -224,7 +274,6 @@ class SettingDialog(QDialog):
         form.setHorizontalSpacing(16)
         form.setVerticalSpacing(12)
         outer.addLayout(form)
-        outer.addStretch()
         return page, form
 
     # ------------------------------------------------------------------
@@ -278,9 +327,24 @@ class SettingDialog(QDialog):
     def _on_nav_changed(self, current: QTreeWidgetItem | None, _previous):
         if current is None:
             return
-        index = current.data(0, PAGE_INDEX_ROLE)
-        self.stack.setCurrentIndex(index)
-        self.page_title.setText(self._breadcrumbs[index])
+        index = current.data(0, SECTION_INDEX_ROLE)
+        section = self._sections[index]
+        self.stack.setCurrentWidget(section.group.scroll)
+        self.page_title.setText(section.breadcrumb)
+        self._debug(f">> Settings section selected index={index}")
+        # Wait for the selected category's scroll range and layout to update.
+        QTimer.singleShot(0, lambda: self._scroll_to_section(current))
+
+    def _scroll_to_section(self, item):
+        if self.nav.currentItem() is not item:
+            return
+        index = item.data(0, SECTION_INDEX_ROLE)
+        section = self._sections[index]
+        section.group.layout.activate()
+        position = 0 if item.parent() is None else section.widget.y()
+        bar = section.group.scroll.verticalScrollBar()
+        bar.setValue(position)
+        self._debug(f"<< Settings section revealed index={index} scroll={bar.value()}")
 
     def _filter_nav(self, text: str):
         needle = text.strip().lower()

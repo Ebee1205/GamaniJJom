@@ -202,6 +202,10 @@ QDialog#positionDialog QLabel#status { font-size: var(--font-size-small); }
 QLabel#commonDialogText { color: var(--color-text-muted); font-size: var(--font-size-body); background: var(--bg-transparent); }
 
 /* SettingDialog: navigation tree, page title and divider */
+QScrollArea#settingsScroll, QWidget#settingsViewport, QWidget#settingsContent {
+    background: var(--bg-transparent);
+    border: none;
+}
 QTreeWidget#settingNav {
     background: var(--bg-list);
     border: var(--border-width) solid var(--border-list);
