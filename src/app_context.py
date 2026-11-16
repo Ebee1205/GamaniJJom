@@ -27,6 +27,8 @@ class LoggerConfig(BaseModel):
 class AppConfig(BaseModel):
     environment: str
     project_name: str
+    save_path: str
+    
     logger: LoggerConfig
 
 
