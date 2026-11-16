@@ -99,6 +99,8 @@ def run(ctx, args: argparse.Namespace) -> ExitCode:
     app = QApplication([sys.argv[0]])
     app.setApplicationName("GamaniJJom")
     app.setQuitOnLastWindowClosed(False)
+    from src.ui.resources import apply_theme
+    apply_theme(app)
 
     callback_failed = False
 
