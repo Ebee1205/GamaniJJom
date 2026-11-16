@@ -7,6 +7,7 @@ All rights reserved.
 
 import argparse
 import os
+import signal
 import sys
 import traceback
 from enum import IntEnum
@@ -113,6 +114,14 @@ def run(ctx, args: argparse.Namespace) -> ExitCode:
     try:
         if not controller.start():
             return ExitCode.FAILURE
+        
+        def handle_signal(signum, frame):
+            ctx.log.info("APP", f"Received signal {signum}, shutting down...")
+            app.quit()
+        
+        signal.signal(signal.SIGINT, handle_signal)
+        signal.signal(signal.SIGTERM, handle_signal)
+        
         if args.smoke_test:
             QTimer.singleShot(1200, app.quit)
         ctx.log.info("APP", "Qt application started")
