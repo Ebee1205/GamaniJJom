@@ -105,7 +105,11 @@ QCheckBox::indicator {
     background: var(--bg-input);
 }
 QCheckBox::indicator:hover { border-color: var(--border-focus); }
-QCheckBox::indicator:checked { background: var(--bg-primary-hover); border-color: var(--border-focus); }
+QCheckBox::indicator:checked {
+    background: var(--bg-primary-hover);
+    border-color: var(--border-focus);
+    image: url("../icons/check.svg");
+}
 QComboBox {
     background: var(--bg-input);
     border: var(--border-width) solid var(--border-input);

@@ -26,7 +26,8 @@ def load_theme(path: Path | None = None) -> str:
     Tokens use --name: value; and var(--name). Token values must be literals;
     nested variables and CSS fallback expressions are intentionally unsupported.
     """
-    source = (path or RESOURCE_ROOT / "qss/theme.qss").read_text(encoding="utf-8")
+    theme_path = (path or RESOURCE_ROOT / "qss/theme.qss").resolve()
+    source = theme_path.read_text(encoding="utf-8")
     # Comments are documentation, not declarations or Qt selectors.
     source = re.sub(r"/\*.*?\*/", "", source, flags=re.DOTALL)
     blocks = list(_TOKEN_BLOCK.finditer(source))
@@ -55,4 +56,10 @@ def load_theme(path: Path | None = None) -> str:
     stylesheet = _TOKEN_REFERENCE.sub(replace, _TOKEN_BLOCK.sub("", source))
     if "var(" in stylesheet or ":root" in stylesheet:
         raise ValueError("Unresolved or unsupported theme token syntax")
+    # Qt otherwise resolves relative image URLs against the process directory.
+    stylesheet = re.sub(
+        r'url\("(\.{1,2}/[^"\n]+)"\)',
+        lambda match: f'url("{(theme_path.parent / match.group(1)).resolve().as_posix()}")',
+        stylesheet,
+    )
     return stylesheet
