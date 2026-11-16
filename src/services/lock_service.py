@@ -1,7 +1,36 @@
-"""Enforce captured geometry without restoring minimized/maximized windows."""
+"""Enforce captured geometry by blocking move/size operations."""
+import ctypes
+from ctypes import wintypes
+
 from src.models.attachment import Attachment
-from src.models.window_schema import WindowInfo
+from src.models.window_enum import GuiThreadFlag, WindowMessage
+from src.models.window_schema import WindowInfo, WindowRect
 from src.services.window_service import WindowService
+
+user32 = ctypes.WinDLL("user32", use_last_error=True)
+
+user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+user32.GetGUIThreadInfo.argtypes = [wintypes.DWORD, ctypes.c_void_p]
+user32.GetGUIThreadInfo.restype = wintypes.BOOL
+user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+user32.PostMessageW.restype = wintypes.BOOL
+
+TOLERANCE = 2  # px, DPI/프레임 오차 허용
+
+
+class GUITHREADINFO(ctypes.Structure):
+    _fields_ = [
+        ("cbSize", wintypes.DWORD),
+        ("flags", wintypes.DWORD),
+        ("hwndActive", wintypes.HWND),
+        ("hwndFocus", wintypes.HWND),
+        ("hwndCapture", wintypes.HWND),
+        ("hwndMenuOwner", wintypes.HWND),
+        ("hwndMoveSize", wintypes.HWND),
+        ("hwndCaret", wintypes.HWND),
+        ("rcCaret", wintypes.RECT),
+    ]
 
 
 class LockService:
@@ -11,27 +40,51 @@ class LockService:
     def toggle(self, attachment: Attachment) -> bool:
         if attachment.locked_rect is not None:
             attachment.locked_rect = None
-            attachment.failures = 0
             return False
         current = self.windows.read(attachment.target)
         if self.windows.is_suspended(current):
             raise ValueError("일반 창으로 복원한 뒤 Lock을 켜세요.")
         attachment.locked_rect = current.rect
-        attachment.failures = 0
         return True
 
+    @staticmethod
+    def _is_moving(hwnd: int) -> bool:
+        """대상 창이 현재 사용자 이동/리사이즈 모달 루프 중인지 확인."""
+        info = GUITHREADINFO()
+        info.cbSize = ctypes.sizeof(GUITHREADINFO)
+        thread_id = user32.GetWindowThreadProcessId(hwnd, None)
+        if not user32.GetGUIThreadInfo(thread_id, ctypes.byref(info)):
+            return False
+        return bool(info.flags & GuiThreadFlag.INMOVESIZE) and info.hwndMoveSize == hwnd
+
+    @staticmethod
+    def _cancel_move(hwnd: int) -> None:
+        """진행 중인 이동/리사이즈를 취소."""
+        user32.PostMessageW(hwnd, WindowMessage.CANCELMODE, 0, 0)
+
+    @staticmethod
+    def _close_enough(a: WindowRect, b: WindowRect) -> bool:
+        return (
+            abs(a.x - b.x) <= TOLERANCE
+            and abs(a.y - b.y) <= TOLERANCE
+            and abs(a.width - b.width) <= TOLERANCE
+            and abs(a.height - b.height) <= TOLERANCE
+        )
+
     def enforce(self, attachment: Attachment, current: WindowInfo) -> bool:
+        """Block movement while locked. Returns True if an action was taken."""
         desired = attachment.locked_rect
         if desired is None or self.windows.is_suspended(current):
             return False
-        if desired == current.rect:
-            attachment.failures = 0
-            return False
-        # Asynchronous requests may be accepted but ignored by the other app.
-        # Stop after five unsuccessful observations rather than fight indefinitely.
-        attachment.failures += 1
-        if attachment.failures > 5:
-            attachment.locked_rect = None
-            raise OSError("창이 고정 요청을 따르지 않아 Lock을 해제했습니다.")
-        self.windows.apply(current, desired)
-        return True
+
+        # 1) 이동/리사이즈 시작 자체를 차단
+        if self._is_moving(current.hwnd):
+            self._cancel_move(current.hwnd)
+            return True
+
+        # 2) 프로그램이 직접 옮기는 등 이미 어긋난 경우 1회 보정 (Lock은 해제하지 않음)
+        if not self._close_enough(desired, current.rect):
+            self.windows.lock_size(current, desired)
+            return True
+
+        return False

@@ -24,6 +24,16 @@ class DpiAwarenessContext(IntEnum):
 
 
 class SetWindowPosFlag(IntFlag):
+    NOMOVE = 0x0002
     NOZORDER = 0x0004
     NOACTIVATE = 0x0010
+    NOSIZE = 0x0001
     ASYNCWINDOWPOS = 0x4000
+
+
+class WindowMessage(IntEnum):
+    CANCELMODE = 0x001F
+
+
+class GuiThreadFlag(IntFlag):
+    INMOVESIZE = 0x00000002

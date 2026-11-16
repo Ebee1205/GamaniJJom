@@ -39,3 +39,9 @@ class WindowService:
         _validate_rect(rect)
         current = self.read(target)
         window_api.set_rect(current.hwnd, rect)
+
+    def lock_size(self, target: WindowInfo, rect: WindowRect) -> None:
+        """Lock window size only; prevent any movement."""
+        _validate_rect(rect)
+        current = self.read(target)
+        window_api.lock_size(current.hwnd, rect)

@@ -121,6 +121,22 @@ def set_rect(hwnd: int, rect: window_schema.WindowRect) -> None:
         raise _last_error()
 
 
+def lock_size(hwnd: int, rect: window_schema.WindowRect) -> None:
+    """Lock window size only; prevent any movement."""
+    if _is_iconic(hwnd) or _is_zoomed(hwnd):
+        raise ValueError("최소화·최대화된 창은 일반 창으로 복원한 뒤 적용하세요.")
+    lock_flags = (
+        window_enum.SetWindowPosFlag.NOMOVE
+        | window_enum.SetWindowPosFlag.NOZORDER
+        | window_enum.SetWindowPosFlag.NOACTIVATE
+        | window_enum.SetWindowPosFlag.ASYNCWINDOWPOS
+    )
+    if not _set_window_pos(
+        hwnd, None, 0, 0, rect.width, rect.height, int(lock_flags)
+    ):
+        raise _last_error()
+
+
 _get_foreground = _bind(user32, "GetForegroundWindow", [], wt.HWND)
 _get_ancestor = _bind(user32, "GetAncestor", [wt.HWND, wt.UINT], wt.HWND)
 _window_from_point = _bind(user32, "WindowFromPoint", [wt.POINT], wt.HWND)
