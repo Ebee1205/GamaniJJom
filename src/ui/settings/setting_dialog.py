@@ -168,7 +168,6 @@ class SettingDialog(QDialog):
         save = self._add_page("저장", self._build_save_page())
         self._add_page("파일명", self._build_filename_page(), parent=save)
         self._add_page("캡처 후 동작", self._build_after_capture_page(), parent=save)
-        self._add_page("로거", self._build_logger_page())
 
         self.nav.expandAll()
         self.nav.setCurrentItem(self.nav.topLevelItem(0))
@@ -210,13 +209,6 @@ class SettingDialog(QDialog):
         page, form = self._new_page()
         form.addRow(self._check_field("save.notification_enabled", "캡처 완료 알림 표시"))
         form.addRow(self._check_field("save.copy_to_clipboard", "클립보드에 자동 복사"))
-        return page
-
-    def _build_logger_page(self) -> QWidget:
-        page, form = self._new_page()
-        form.addRow("로그 레벨", self._combo_field(
-            "logger.level", [(name, name) for name in ("DEBUG", "INFO", "WARNING", "ERROR")]))
-        form.addRow(self._check_field("logger.use_console", "콘솔에 로그 출력"))
         return page
 
     @staticmethod
@@ -338,17 +330,24 @@ class SettingDialog(QDialog):
         """바뀐 값을 반영한다 (대화상자는 닫지 않음)."""
         changes = self.changed_values()
         if not changes:
-            return
+            return True
         for key, value in changes.items():
-            self._fields[key].initial = value
             self.setting_changed.emit(key, value)
         self.settings_applied.emit(changes)
         self._refresh_buttons()
-        self._debug(f">> Settings applied keys={list(changes)}")
+        success = not self.changed_values()
+        self._debug(f"<< Settings apply completed count={len(changes)} result={'saved' if success else 'pending'}")
+        return success
+
+    def mark_applied(self, changes):
+        """Advance the change baseline only after the controller confirms saving."""
+        for key, value in changes.items():
+            self._fields[key].initial = value
+        self._refresh_buttons()
 
     def accept(self):
-        self.apply()
-        super().accept()
+        if self.apply():
+            super().accept()
 
     def _refresh_buttons(self, *_):
         """바뀐 값이 있을 때만 [적용]을 켠다."""

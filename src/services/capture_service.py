@@ -1,6 +1,8 @@
 """Capture a window, save it as PNG, and copy it to the clipboard."""
 from pathlib import Path
 
+from PySide6.QtCore import Qt
+
 from src.adapters.windows.window_grabber import WindowGrabber
 from src.models.window_schema import WindowInfo
 from src.services.image_save_service import ImageSaveService
@@ -15,6 +17,17 @@ class CaptureService:
         self.log = log
         self.grabber = grabber or WindowGrabber()
         self.saver = saver or ImageSaveService(save_path)
+        self.scale = 1
+        self.copy_to_clipboard = True
+
+    def configure(self, settings) -> None:
+        """Apply the latest save options to this shared service instance."""
+        self.saver.configure(settings.path, settings.filename.prefix,
+                             settings.filename.postfix_date_enabled,
+                             settings.filename.postfix_date_format)
+        self.scale = settings.scale
+        self.copy_to_clipboard = settings.copy_to_clipboard
+        self._debug(f"!! Capture settings updated scale={self.scale} clipboard={self.copy_to_clipboard}")
 
     @property
     def save_path(self) -> Path:
@@ -24,12 +37,17 @@ class CaptureService:
         """Save the selected window to the configured folder; return its PNG path."""
         try:
             pixmap = self.grabber.grab(target.hwnd)
+            if self.scale != 1:
+                pixmap = pixmap.scaled(pixmap.width() * self.scale, pixmap.height() * self.scale,
+                                       Qt.AspectRatioMode.IgnoreAspectRatio,
+                                       Qt.TransformationMode.SmoothTransformation)
             output_path = self.saver.save_png(pixmap)
             self._debug(
                 f"++ Capture saved path={ascii(str(output_path))} "
                 f"{self._target_info(target)} result=saved"
             )
-            self._copy_to_clipboard(pixmap)
+            if self.copy_to_clipboard:
+                self._copy_to_clipboard(pixmap)
             return output_path
         except Exception as error:
             self._debug(

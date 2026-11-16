@@ -150,5 +150,5 @@ class ConfigHandler(Generic[T]):
 # handler.load()                              # 읽기 + 검증
 # handler.get("logger.level")                 # "DEBUG"
 # handler.set("logger.level", "INFO")         # 수정 (메모리)
-# handler.update({"logger.use_console": False, "environment": "prod"})
+# handler.update({"save.scale": 2, "environment": "prod"})
 # handler.save()                              # 파일에 저장

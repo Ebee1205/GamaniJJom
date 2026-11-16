@@ -8,6 +8,7 @@ class ToolbarController(QObject):
     attach_requested = Signal()
     detach_requested = Signal(object)
     notification = Signal(str)
+    capture_completed = Signal(str)
     changed = Signal()
     quit_requested = Signal()
 
@@ -62,7 +63,7 @@ class ToolbarController(QObject):
             saved_path = self.capture_service.capture(target)
             if self.log is not None:
                 self.log.debug("TOOLBAR", f"<< Capture completed hwnd={target.handle_text} pid={target.pid}")
-            self.notification.emit(f"캡처 저장 완료: {saved_path}")
+            self.capture_completed.emit(f"캡처 저장 완료: {saved_path}")
         except (NotImplementedError, ValueError, OSError) as error:
             if self.log is not None:
                 self.log.debug("TOOLBAR", f"<< UI operation ended error_type={type(error).__name__}")

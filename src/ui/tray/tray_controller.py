@@ -7,7 +7,7 @@ from src.ui.wd_size.wd_size_controller import WdSizeController
 from src.ui.toolbar.toolbar_controller import ToolbarController
 from src.ui.toolbar.toolbar_window import ToolbarWindow
 from src.ui.cmm.cmm_dialog import CmmDialog
-from ui.settings.setting_dialog import SettingDialog
+from src.ui.settings.setting_dialog import SettingDialog
 from src.ui.settings.settings_controller import SettingsController
 
 
@@ -25,6 +25,9 @@ class TrayController(QObject):
         self.controllers = {}
         self.programs = WdSizeController(windows, attachments, self)
         self.settings = SettingsController(SettingDialog(self.programs.window), ctx, self)
+        self.settings.config_changed.connect(self.apply_settings)
+        self.settings.notification.connect(self.notify)
+        self.apply_settings()
         self.common_dlg = CmmDialog(self.programs.window, self.log)
         self.common_dlg.rejected.connect(self.cancel_quit)
         self.programs.target_requested.connect(self.attach)
@@ -57,10 +60,25 @@ class TrayController(QObject):
         self.show_picker()
         return True
 
-    def notify(self, message):
-        self.log.debug("UI", f"<< Notification displayed length={len(message)}")
+    def apply_settings(self):
+        """Refresh shared runtime services after a successful settings save."""
+        config = getattr(self.ctx, "cfg", None)
+        if config is None:
+            return
+        self.capture.configure(config.save)
+        if self.log is not None:
+            self.log.debug("SETTINGS", "!! Runtime settings applied")
+
+    def notify(self, message, *, capture_completed=False):
         self.programs.window.status.setText(message)
-        self.tray.showMessage("GamaniJJom", message)
+        config = getattr(self.ctx, "cfg", None)
+        toast_enabled = not capture_completed or config is None or config.save.notification_enabled
+        self.log.debug("UI", f"<< Notification processed length={len(message)} toast={toast_enabled}")
+        if toast_enabled:
+            self.tray.showMessage("GamaniJJom", message)
+
+    def notify_capture(self, message):
+        self.notify(message, capture_completed=True)
 
     def refresh_views(self):
         self.programs.refresh()
@@ -102,6 +120,7 @@ class TrayController(QObject):
             controller = ToolbarController(window, attachment, self.locks, self.capture,
                                            self.tracking, self.windows, self)
             controller.notification.connect(self.notify)
+            controller.capture_completed.connect(self.notify_capture)
             controller.position_requested.connect(self.programs.show_position)
             controller.settings_requested.connect(self.settings.show)
             controller.attach_requested.connect(self.show_picker)

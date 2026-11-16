@@ -10,9 +10,18 @@ from PySide6.QtWidgets import QApplication
 
 class ImageSaveService:
     def __init__(self, save_path: str | Path = "D:/saves/"):
+        self.configure(save_path)
+
+    def configure(self, save_path: str | Path, prefix: str = "capture_",
+                  postfix_date_enabled: bool = True,
+                  postfix_date_format: str = "%Y%m%d_%H%M%S_%f") -> None:
         if not str(save_path).strip():
             raise ValueError("캡처 저장 경로가 비어 있습니다.")
         self.save_path = self._resolve_directory(save_path)
+        self.prefix = prefix
+        self.postfix_date_enabled = postfix_date_enabled
+        self.postfix_date_format = postfix_date_format
+        self._new_filename()  # Validate filename options before they are used by a capture.
 
     def save_png(self, pixmap: QPixmap) -> Path:
         """PNG로 저장하고 파일 경로를 반환한다. (인코딩을 먼저 끝내서 실패 시 빈 파일이 남지 않음)"""
@@ -49,6 +58,10 @@ class ImageSaveService:
         finally:
             buffer.close()
 
-    @staticmethod
-    def _new_filename() -> str:
-        return f"capture_{datetime.now():%Y%m%d_%H%M%S_%f}_{uuid4().hex[:8]}.png"
+    def _new_filename(self) -> str:
+        date = datetime.now().strftime(self.postfix_date_format) if self.postfix_date_enabled else ""
+        stem = f"{self.prefix}{date}"
+        if any(char in stem for char in '<>:"/\\|?*') or any(ord(char) < 32 for char in stem):
+            raise ValueError("파일명 접두어 또는 날짜 형식에 사용할 수 없는 문자가 있습니다.")
+        separator = "" if not stem or stem.endswith(("_", "-")) else "_"
+        return f"{stem}{separator}{uuid4().hex[:8]}.png"
