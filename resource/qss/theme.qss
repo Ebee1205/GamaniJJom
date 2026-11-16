@@ -55,3 +55,49 @@ QToolButton#closeButton:pressed { background: #536277; }
 QLineEdit#compactField { padding: 4px 6px; }
 QDialog#positionDialog QPushButton { padding: 4px 14px; }
 QDialog#positionDialog QLabel#status { font-size: 11px; }
+
+/* ---- CommonDialog: reusable confirmation / acknowledgement card ---- */
+QDialog#commonDialog { background: transparent; }
+QFrame#commonDialogSurface {
+    background: #ffffff;
+    border-radius: 24px;
+}
+QLabel#commonDialogTitle {
+    color: #101828;
+    font-size: 20px;
+    font-weight: 400;
+    background: transparent;
+}
+QLabel#commonDialogText {
+    color: #6a7282;
+    font-size: 14px;
+    font-weight: 400;
+    background: transparent;
+}
+QToolButton#commonDialogClose {
+    background: transparent;
+    border: none;
+    border-radius: 14px;
+    color: #6b7280;
+    font-size: 22px;
+    padding: 0;
+}
+QToolButton#commonDialogClose:hover { background: #f3f4f6; }
+QPushButton#commonDialogConfirm, QPushButton#commonDialogCancel {
+    color: #101828;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 16px;
+    padding: 8px 16px;
+}
+QPushButton#commonDialogConfirm:hover { background: #f3f4f6; }
+QPushButton#commonDialogConfirm:pressed { background: #e5e7eb; }
+QPushButton#commonDialogConfirm:focus { border-color: #475467; }
+QPushButton#commonDialogCancel:hover { background: #f3f4f6; }
+QPushButton#commonDialogCancel:pressed { background: #e5e7eb; }
+QPushButton#commonDialogCancel:focus { border-color: #475467; }
+
+/* ---- CommonDialog: PositionDialog와 같은 카드 스타일(dialogSurface/dialogTitle/closeButton) 재사용 ---- */
+QDialog#commonDialog { background: transparent; }
+QLabel#commonDialogText { color: #a4b0c0; font-size: 12px; background: transparent; }
+QDialog#commonDialog QPushButton { padding: 4px 14px; }

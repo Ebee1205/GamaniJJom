@@ -6,6 +6,7 @@ from src.ui.cmp.sys_tray_cmp import SystemTrayComponent
 from src.ui.cntr.settings_cntr import SettingsController
 from src.ui.cntr.toolbar_cntr import ToolbarController
 from src.ui.wd.floating_toolbar import FloatingToolbarWindow
+from src.ui.dlg.common_dlg import CommonDialog
 
 
 class TrayController(QObject):
@@ -21,6 +22,8 @@ class TrayController(QObject):
         self.tracking = tracking
         self.controllers = {}
         self.settings = SettingsController(windows, attachments, self)
+        self.common_dlg = CommonDialog(self.settings.window, self.log)
+        self.common_dlg.rejected.connect(self.cancel_quit)
         self.settings.target_requested.connect(self.attach)
         self.settings.reveal_requested.connect(self.show_connection)
         self.settings.geometry_changed.connect(self.on_geometry_changed)
@@ -149,30 +152,25 @@ class TrayController(QObject):
         if self.log is not None:
             self.log.debug("UI", ">> Exit confirmation requested")
         self._confirming_quit = True
-        try:
-            dialog = QMessageBox(self.settings.window)
-            dialog.setWindowTitle("종료 확인")
-            dialog.setText("종료하시겠습니까?")
-            dialog.setIcon(QMessageBox.Icon.Question)
-            dialog.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-            dialog.button(QMessageBox.StandardButton.Yes).setText("종료")
-            dialog.button(QMessageBox.StandardButton.No).setText("취소")
-            dialog.setDefaultButton(QMessageBox.StandardButton.No)
-            dialog.setEscapeButton(QMessageBox.StandardButton.No)
-            result = dialog.exec()
-            dialog.deleteLater()
-            if result != QMessageBox.StandardButton.Yes:
-                if self.log is not None:
-                    self.log.debug("UI", "<< Exit cancelled")
-                return
-            self._quit_confirmed = True
-            self.settings.window.exit_confirmed = True
-            if self.log is not None:
-                self.log.debug("UI", "<< Exit confirmed")
-            self.shutdown()
-            self.app.quit()
-        finally:
-            self._confirming_quit = False
+        self.common_dlg.open_dialog(
+            "종료 확인", "종료하시겠습니까?", self.confirm_quit, False, "종료"
+        )
+
+    def cancel_quit(self):
+        self._confirming_quit = False
+        if not self._closed and self.log is not None:
+            self.log.debug("UI", "<< Exit cancelled")
+
+    def confirm_quit(self):
+        if self._closed or self._quit_confirmed:
+            return
+        self._confirming_quit = False
+        self._quit_confirmed = True
+        self.settings.window.exit_confirmed = True
+        if self.log is not None:
+            self.log.debug("UI", "<< Exit confirmed")
+        self.shutdown()
+        self.app.quit()
 
     def shutdown(self):
         if self.log is not None:
@@ -180,6 +178,7 @@ class TrayController(QObject):
         if self._closed:
             return
         self._closed = True
+        self.common_dlg.is_active = False
         self.timer.stop()
         self.tray.hide()
         self.tray.menu.hide()
