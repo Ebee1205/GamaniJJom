@@ -17,8 +17,7 @@ class ToolbarState:
 
     @property
     def show_toolbar(self):
-        # A successfully inspected target keeps its controller visible.
-        return True
+        return self.visible and not self.minimized
 
 
 class PickCancelled(Exception):

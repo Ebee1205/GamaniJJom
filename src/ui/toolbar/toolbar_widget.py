@@ -63,13 +63,14 @@ class ToolbarWidget(QFrame):
         self.handle.dragged.connect(self.dragged.emit)
         layout.addWidget(self.handle)
         self.lock_button = CmmButton("unlock", "현재 위치·크기 고정", self, checkable=True)
+        self.pin_button = CmmButton("pin", "툴바 위치 고정 및 항상 위에 표시", self, checkable=True)
         self.capture_button = CmmButton("capture", "화면 캡처 · 준비 중", self)
         self.more_button = CmmButton("more", "더보기", self)
         self.lock_button.clicked.connect(lambda: self.lock_requested.emit())
         self.lock_button.secondary_requested.connect(self.position_requested.emit)
         self.capture_button.clicked.connect(self.capture_requested.emit)
         self.capture_button.secondary_requested.connect(self.capture_options_requested.emit)
-        for button in (self.lock_button, self.capture_button, self.more_button):
+        for button in (self.pin_button, self.lock_button, self.capture_button, self.more_button):
             layout.addWidget(button)
         self.menu = QMenu(self)
         self.menu.triggered.connect(lambda action: self.log.debug("TOOLBAR", f">> Menu action selected index={self.menu.actions().index(action)}") if self.log is not None else None)

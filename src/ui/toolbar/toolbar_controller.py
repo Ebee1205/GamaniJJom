@@ -26,6 +26,8 @@ class ToolbarController(QObject):
         toolbar = window.toolbar
         toolbar.log = self.log
         toolbar.handle.log = self.log
+        toolbar.pin_button.log = self.log
+        toolbar.pin_button.toggled.connect(self.set_pinned)
         toolbar.lock_button.log = self.log
         toolbar.capture_button.log = self.log
         toolbar.more_button.log = self.log
@@ -40,6 +42,11 @@ class ToolbarController(QObject):
         toolbar.reset_requested.connect(self.reset_position)
         toolbar.quit_requested.connect(self.quit_requested.emit)
         toolbar.dragged.connect(self.drag)
+
+    def set_pinned(self, pinned: bool):
+        self.window.set_pinned(pinned)
+        self.window.toolbar.handle.setEnabled(not pinned)
+        self.update()
 
     def toggle_lock(self):
         if self.log is not None:
@@ -124,17 +131,19 @@ class ToolbarController(QObject):
         if previous != (self.attachment.target.title, self.attachment.locked_rect):
             self.window.setWindowTitle(f"GamaniJJom — {state.target.title}")
             self.changed.emit()
+        pinned = self.window.toolbar.pin_button.isChecked()
+        if not pinned and not state.show_toolbar:
+            self.window.toolbar.menu.hide()
+            self.window.hide()
+            return
+        self.window.show()
         try:
-            # Minimized windows can report off-screen coordinates. Keep the
-            # controller at its last position until the target is restored.
-            if state.visible and not state.minimized:
+            if not pinned:
                 self.tracking.place(int(self.window.winId()), state.target, self.attachment.offset)
-            self.window.show()
             self._placement_error = None
         except OSError as error:
             if self.log is not None:
                 self.log.debug("TOOLBAR", f"<< UI operation ended error_type={type(error).__name__}")
-            self.window.show()
             if str(error) != self._placement_error:
                 self.notification.emit(f"컨트롤러 배치 실패: {error}")
                 self._placement_error = str(error)

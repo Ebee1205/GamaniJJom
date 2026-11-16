@@ -8,7 +8,7 @@ from src.ui.toolbar.toolbar_widget import ToolbarWidget
 class ToolbarWindow(QWidget):
     def __init__(self, title: str = "", parent=None):
         flags = (Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint
-                 | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.WindowDoesNotAcceptFocus)
+                 | Qt.WindowType.WindowDoesNotAcceptFocus)
         super().__init__(parent, flags)
         self.log = None
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
@@ -19,6 +19,11 @@ class ToolbarWindow(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.toolbar)
         self.setFixedSize(self.sizeHint())
+
+    def set_pinned(self, pinned: bool):
+        position = self.pos()
+        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, pinned)
+        self.move(position)
 
     def closeEvent(self, event):
         if self.log is not None:
