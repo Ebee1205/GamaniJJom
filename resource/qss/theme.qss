@@ -57,3 +57,20 @@ QLineEdit#compactField { padding: 4px 6px; }
 QDialog#positionDialog QPushButton, QDialog#commonDialog QPushButton { padding: 4px 14px; }
 QDialog#positionDialog QLabel#status { font-size: 11px; }
 QLabel#commonDialogText { color: #a4b0c0; font-size: 12px; background: transparent; }
+
+/* ---- SettingDialog: 좌측 메뉴 + 우측 페이지 ---- */
+QDialog#SettingDialog QPushButton { padding: 4px 14px; }
+QTreeWidget#settingNav { background: #202630; border: 1px solid #394454; border-radius: 5px; outline: none; }
+QTreeWidget#settingNav::item { padding: 6px 4px; }
+QTreeWidget#settingNav::branch { background: transparent; }
+QTreeWidget#settingNav::branch:selected { background: #354c60; }
+QTreeWidget#settingNav::item:hover:!selected { background: #29313e; }
+QLabel#pageTitle { font-size: 15px; font-weight: 600; }
+QFrame#pageLine { background: #394454; border: none; }
+QCheckBox { spacing: 8px; }
+QCheckBox::indicator { width: 14px; height: 14px; border: 1px solid #5a677c; border-radius: 3px; background: #222935; }
+QCheckBox::indicator:hover { border-color: #79aa9b; }
+QCheckBox::indicator:checked { background: #3c7465; border-color: #79aa9b; }
+QComboBox { background: #222935; border: 1px solid #475467; border-radius: 4px; padding: 4px 8px; min-height: 18px; }
+QComboBox:hover, QComboBox:focus { border-color: #79aa9b; }
+QComboBox QAbstractItemView { background: #242c37; border: 1px solid #4c586a; selection-background-color: #3a4b60; outline: none; }
