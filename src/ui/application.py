@@ -11,4 +11,4 @@ class DesktopController(TrayController):
     def __init__(self, app, ctx):
         windows = WindowService()
         super().__init__(app, ctx, windows, AttachService(windows),
-                         LockService(windows), CaptureService(), ToolbarService())
+                         LockService(windows), CaptureService(ctx.cfg.save_path, ctx.log), ToolbarService())

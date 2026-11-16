@@ -10,5 +10,6 @@
     "max_files": "7d",
     "rotation": "midnight",
     "use_console": true
-  }
+  },
+  "save_path": "D:/saves/"
 }
