@@ -8,7 +8,6 @@ from src.ui.resources import icon
 class SystemTrayComponent(QSystemTrayIcon):
     attach_requested = Signal()
     settings_requested = Signal()
-    reveal_requested = Signal()
     connection_requested = Signal(object)
     quit_requested = Signal()
 
@@ -21,7 +20,6 @@ class SystemTrayComponent(QSystemTrayIcon):
         self.menu.triggered.connect(lambda action: self.log.debug("TRAY", ">> Tray menu action selected") if self.log is not None else None)
         self.menu.addAction("프로그램 목록 열기", self.settings_requested.emit)
         self.connections = self.menu.addMenu("연결된 프로그램")
-        self.menu.addAction("컨트롤러 표시", self.reveal_requested.emit)
         self.menu.addSeparator()
         self.menu.addAction("종료", self.quit_requested.emit)
         self.setContextMenu(self.menu)

@@ -25,7 +25,6 @@ class TrayController(QObject):
         self.common_dlg = CommonDialog(self.settings.window, self.log)
         self.common_dlg.rejected.connect(self.cancel_quit)
         self.settings.target_requested.connect(self.attach)
-        self.settings.reveal_requested.connect(self.show_connection)
         self.settings.geometry_changed.connect(self.on_geometry_changed)
         self.settings.notification.connect(self.notify)
         self.settings.quit_requested.connect(self.request_quit)
@@ -33,7 +32,6 @@ class TrayController(QObject):
         self.tray.attach_requested.connect(self.show_picker)
         self.tray.settings_requested.connect(self.settings.show)
         self.tray.connection_requested.connect(self.show_connection)
-        self.tray.reveal_requested.connect(self.reveal)
         self.tray.quit_requested.connect(self.request_quit)
         self.timer = QTimer(self)
         self.timer.setInterval(200)
@@ -121,12 +119,6 @@ class TrayController(QObject):
         self.attachments.detach(key)
         if not self._closed:
             self.refresh_views()
-
-    def reveal(self):
-        if self.log is not None:
-            self.log.debug("TRAY", f">> Reveal all toolbars requested")
-        for controller in list(self.controllers.values()):
-            controller.reveal()
 
     def show_connection(self, key):
         if self.log is not None:

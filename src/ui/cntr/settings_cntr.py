@@ -8,7 +8,6 @@ from src.ui.wd.settings import SettingsWindow
 
 class SettingsController(QObject):
     target_requested = Signal(object)
-    reveal_requested = Signal(object)
     geometry_changed = Signal(object)
     quit_requested = Signal()
     notification = Signal(str)
@@ -28,7 +27,6 @@ class SettingsController(QObject):
         self.verify_timer = QTimer(self)
         self.verify_timer.setSingleShot(True)
         self.verify_timer.timeout.connect(self.verify)
-        self.window.reveal_requested.connect(lambda target: self.reveal_requested.emit(target.identity))
         self.window.position_requested.connect(self.show_position)
         self.window.target_requested.connect(self.target_requested.emit)
         self.window.refresh_requested.connect(self.refresh)

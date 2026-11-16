@@ -35,7 +35,6 @@ class SettingsWindow(QWidget):
     target_requested = Signal(object)    # 연결/변경할 프로그램을 선택함
     refresh_requested = Signal()         # 목록 새로고침 요청
     quit_requested = Signal()            # 창 닫힘
-    reveal_requested = Signal(object)    # 컨트롤러 표시 요청
     position_requested = Signal(object)  # 위치·크기 변경 요청
 
     def __init__(self, parent=None):
@@ -102,7 +101,7 @@ class SettingsWindow(QWidget):
         return section
 
     def _build_attached_section(self):
-        """현재 연결된 프로그램 목록과 [컨트롤러 표시], [위치·크기] 버튼."""
+        """현재 연결된 프로그램 목록과 [위치·크기] 버튼."""
         section = QWidget()
         layout = QVBoxLayout(section)
         layout.setContentsMargins(0, 10, 0, 0)
@@ -122,7 +121,6 @@ class SettingsWindow(QWidget):
     def _build_attached_actions(self):
         """선택한 연결 프로그램에 적용하는 버튼들 (선택 전에는 비활성화)."""
         action_specs = (
-            ("컨트롤러 표시", self.reveal_requested),
             ("위치·크기…", self.position_requested),
         )
         layout = QHBoxLayout()
