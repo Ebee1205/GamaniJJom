@@ -2,7 +2,7 @@
 import ctypes
 from ctypes import wintypes
 
-from adapters.windows.window_frame_lock import WindowFrameLock
+from src.adapters.windows.window_frame_lock import WindowFrameLock
 from src.models.attachment import Attachment
 from src.models.window_enum import GuiThreadFlag, WindowMessage
 from src.models.window_schema import WindowInfo
