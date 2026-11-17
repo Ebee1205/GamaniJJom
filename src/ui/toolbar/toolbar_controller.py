@@ -97,9 +97,9 @@ class ToolbarController(QObject):
             (toolbar.hide_requested, self.reveal),
             (toolbar.reset_requested, self.reset_position),
             (toolbar.quit_requested, self.quit_requested.emit),
-            (toolbar.drag_started, self.drag.start),
-            (toolbar.drag_moved, self.drag.poll),
-            (toolbar.drag_finished, self.drag.finish),
+            (toolbar.drag_started, self.start_drag),
+            (toolbar.drag_moved, self.poll_drag),
+            (toolbar.drag_finished, self.finish_drag),
             (toolbar.drag_cancelled, self.drag.cancel),
         ):
             signal.connect(slot)
@@ -121,6 +121,15 @@ class ToolbarController(QObject):
     @property
     def dragging(self):
         return self.drag.active
+
+    def start_drag(self):
+        self.drag.start()
+
+    def poll_drag(self):
+        self.drag.poll()
+
+    def finish_drag(self):
+        self.drag.finish()
 
     def cancel_drag(self):
         self.drag.cancel()
