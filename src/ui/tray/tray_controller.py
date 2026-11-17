@@ -104,6 +104,7 @@ class TrayController(QObject):
         if self.controllers:
             controller = next(iter(self.controllers.values()))
             if controller.attachment.target.identity != key:
+                self.locks.release(controller.attachment)
                 controller.window.toolbar.menu.hide()
                 self.programs.verify_timer.stop()
                 self.programs.pending = None
@@ -154,6 +155,8 @@ class TrayController(QObject):
     def on_geometry_changed(self, target):
         controller = self.controllers.get(target.identity)
         if controller:
+            if controller.attachment.locked_rect is None:
+                self.locks.release(controller.attachment)
             controller.sync()
         self.refresh_views()
 

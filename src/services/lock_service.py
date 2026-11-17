@@ -2,6 +2,7 @@
 import ctypes
 from ctypes import wintypes
 
+from src.adapters.windows import window_api
 from src.adapters.windows.window_frame_lock import WindowFrameLock
 from src.models.attachment import Attachment
 from src.models.window_enum import GuiThreadFlag, WindowMessage
@@ -36,7 +37,7 @@ class GUITHREADINFO(ctypes.Structure):
 class LockService:
     def __init__(self, windows: WindowService):
         self.windows = windows
-        self.guard = WindowFrameLock()
+        self.guard = WindowFrameLock(self._on_change)
 
     def release(self, attachment: Attachment) -> None:
         attachment.locked_rect = None
@@ -59,14 +60,22 @@ class LockService:
         info = GUITHREADINFO()
         info.cbSize = ctypes.sizeof(GUITHREADINFO)
         thread_id = user32.GetWindowThreadProcessId(hwnd, None)
+        if not thread_id:
+            raise ctypes.WinError(ctypes.get_last_error())
         if not user32.GetGUIThreadInfo(thread_id, ctypes.byref(info)):
-            return False
+            raise ctypes.WinError(ctypes.get_last_error())
         return bool(info.flags & GuiThreadFlag.INMOVESIZE) and info.hwndMoveSize == hwnd
 
     @staticmethod
     def _cancel_move(hwnd: int) -> None:
         """진행 중인 이동/리사이즈를 취소."""
-        user32.PostMessageW(hwnd, WindowMessage.CANCELMODE, 0, 0)
+        if not user32.PostMessageW(hwnd, WindowMessage.CANCELMODE, 0, 0):
+            raise ctypes.WinError(ctypes.get_last_error())
+
+    def _on_change(self, attachment: Attachment) -> None:
+        if window_api.is_visible(attachment.target.hwnd):
+            current = self.windows.read(attachment.target)
+            self.enforce(attachment, current)
 
     def enforce(self, attachment: Attachment, current: WindowInfo) -> bool:
         """Block movement while locked. Returns True if an action was taken."""
@@ -74,6 +83,7 @@ class LockService:
         if desired is None:
             self.guard.discard(attachment)
             return False
+        self.guard.check_error(attachment)
         if self.windows.is_suspended(current):
             return False
 
