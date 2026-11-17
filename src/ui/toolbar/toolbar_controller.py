@@ -5,8 +5,9 @@ from src.adapters.windows.window_event_watcher import WindowEventWatcher
 import src.models.toolbar_event_schema as tb_es
 import src.models.toolbar_schema as tb_s
 from src.models.attachment import Attachment
+from src.models.toolbar_enum import ToolbarEdge
 from src.models.window_enum import WindowEvent
-from src.models.window_schema import WindowClosedError
+from src.models.window_schema import WindowClosedError, WindowRect
 from src.services.toolbar_state_service import reduce_toolbar
 from src.ui.toolbar.toolbar_drag_gesture import ToolbarDragGesture
 
@@ -63,6 +64,9 @@ class ToolbarController(QObject):
         self._presentation_visible = None
         self._order_limited = False
         self._startup_initialized = False
+        self._capturing = False
+        self._picker = None
+        self._target_was_lost = False
         self._disposed = False
         self._watch_attempted = False
         self._inspection_errors = _ErrorGate()
@@ -84,7 +88,9 @@ class ToolbarController(QObject):
         toolbar = window.toolbar
         window.log = toolbar.log = toolbar.handle.log = self.log
 
-        toolbar.pin_button.clicked.connect(self.detach_toolbar)
+        toolbar.pin_button.clicked.connect(self.toggle_attachment)
+        if hasattr(toolbar, 'pick_requested'):
+            toolbar.pick_requested.connect(self.begin_target_pick)
         toolbar.capture_options_requested.connect(
             lambda: self.notification.emit("캡처 옵션은 준비 중입니다."))
         for signal, slot in (
@@ -156,6 +162,10 @@ class ToolbarController(QObject):
 
         self._release_effect_locks(transition.effects)
         self.state = transition.state
+        if isinstance(event, tb_es.TargetClosed) and old_target is not None and self.state.target is None:
+            self._target_was_lost = True
+        elif self.state.target is not None:
+            self._target_was_lost = False
         if self.state.target != old_target:
             self._switch_target(target_info)
         self.sync()
@@ -224,6 +234,64 @@ class ToolbarController(QObject):
             self.dispatch(tb_es.DetachClicked(self.current_position()))
         self.update()
 
+    def toggle_attachment(self):
+        if self.state.attached:
+            self.detach_toolbar()
+            return
+        if self.attachment is None:
+            self.sync()
+            self.begin_target_pick()
+            return
+        try:
+            current = self.windows.read(self.attachment.target)
+            snapshot = self.tracking.inspect(current)
+            placement = (self.state.maximized_placement or tb_s.AttachedPlacement(ToolbarEdge.RIGHT, 48)
+                         if snapshot.maximized else self.state.normal_placement)
+            candidate = tb_es.SnapCandidate(current.reference, placement, 0, snapshot.maximized)
+            self.dispatch(tb_es.ToolbarDropped(self.current_position(), candidate), target_info=current)
+            self.update()
+        except OSError as error:
+            self.sync()
+            self.notification.emit(str(error))
+
+    def begin_target_pick(self):
+        from src.ui.toolbar.target_picker_widget import TargetPickerWidget
+        self.window.toolbar.menu.hide()
+        self.cancel_drag()
+        if self._picker is None:
+            self._picker = TargetPickerWidget(self.windows, self.tracking, self.window)
+            self._picker.selected.connect(self._target_picked)
+            self._picker.notification.connect(self.notification.emit)
+        self._picker.start()
+
+    def _target_picked(self, target):
+        try:
+            self.select_target(target)
+        except OSError as error:
+            self.notification.emit(str(error))
+
+    def switch_renderer(self, mode):
+        if mode == self.window.mode:
+            return
+        if mode not in ('circle', 'bar'):
+            raise ValueError('Unknown toolbar renderer')
+        self.cancel_drag()
+        if self._picker is not None:
+            self._picker.stop()
+        before = self.tracking.toolbar_rect(self.hwnd)
+        self.window.set_mode(mode)
+        self._connect_toolbar_signals()
+        self.sync()
+        if hasattr(self.window.toolbar, 'set_capture_busy'):
+            self.window.toolbar.set_capture_busy(self._capturing)
+        if not self.state.attached:
+            after = self.tracking.toolbar_rect(self.hwnd)
+            centered = WindowRect(before.x + (before.width - after.width) // 2,
+                                  before.y + (before.height - after.height) // 2,
+                                  after.width, after.height)
+            self.dispatch(tb_es.FreeMoved(self.tracking.screen_position(centered)))
+        self.update()
+
     def request_position(self):
         if self._require_attachment():
             self.position_requested.emit(self.attachment.target)
@@ -240,14 +308,35 @@ class ToolbarController(QObject):
         self.changed.emit()
 
     def capture(self):
-        if not self._require_attachment():
+        if self._capturing or not self._require_attachment():
+            return
+        target = self.attachment.target
+        self._capturing = True
+        self._set_capture_busy(True)
+        # Give the shutter/progress frame time to paint before synchronous capture.
+        QTimer.singleShot(35, lambda: self._complete_capture(target))
+
+    def _set_capture_busy(self, busy):
+        toolbar = self.window.toolbar
+        if hasattr(toolbar, 'set_capture_busy'):
+            toolbar.set_capture_busy(busy)
+        else:
+            toolbar.capture_button.setEnabled(not busy)
+
+    def _complete_capture(self, requested_target):
+        if self._disposed:
+            self._capturing = False
             return
         try:
-            target = self.windows.read(self.attachment.target)
+            target = self.windows.read(requested_target)
             saved_path = self.capture_service.capture(target)
             self.capture_completed.emit(f"캡처 저장 완료: {saved_path}")
         except (NotImplementedError, ValueError, OSError) as error:
             self.notification.emit(str(error))
+        finally:
+            self._capturing = False
+            if not self._disposed:
+                self._set_capture_busy(False)
 
     def sync(self):
         toolbar = self.window.toolbar
@@ -260,6 +349,17 @@ class ToolbarController(QObject):
         toolbar.handle.setEnabled(True)
         toolbar.set_locked(self.attachment is not None and self.attachment.locked_rect is not None)
         toolbar.lock_button.setEnabled(self.state.connected)
+        if hasattr(toolbar, 'set_dock'):
+            placement = (self.state.maximized_placement if self._snapshot is not None
+                         and self._snapshot.maximized else self.state.normal_placement)
+            edge = placement.edge.value if placement is not None else 'right'
+            if self._snapshot is not None and self._snapshot.maximized:
+                edge = {'right': 'left', 'left': 'right', 'top': 'bottom', 'bottom': 'top'}[edge]
+            toolbar.set_dock(edge if attached else None)
+        self.tracking.radial = hasattr(toolbar, 'set_dock')
+        if hasattr(toolbar, 'set_target'):
+            toolbar.set_target(self.attachment.target if self.attachment is not None else None,
+                               lost=self._target_was_lost)
 
     def reveal(self):
         self.update()
@@ -423,6 +523,11 @@ class ToolbarController(QObject):
     # -------------------------------------------------------------- teardown
 
     def dispose(self):
+        if self._disposed:
+            return
+        if self._picker is not None:
+            self._picker.stop()
+            self._picker.deleteLater()
         self._disposed = True
         self._event_timer.stop()
         self.drag.end()

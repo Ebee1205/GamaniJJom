@@ -22,6 +22,25 @@ def _validate_rect(rect: WindowRect) -> None:
 
 
 class WindowService:
+    def window_at_pointer(self, *, ignored_handles=()):
+        """Find the frontmost eligible external window beneath the native cursor."""
+        x, y = window_api.cursor_position()
+        for hwnd in window_api.enumerate_handles():
+            try:
+                if not window_api.is_regular_window(hwnd) or window_api.is_minimized(hwnd):
+                    continue
+                target = window_api.read_window(hwnd)
+                rect = target.rect
+                if rect.x <= x < rect.x + rect.width and rect.y <= y < rect.y + rect.height:
+                    if target.pid == os.getpid():
+                        if hwnd in ignored_handles:
+                            continue
+                        return None
+                    return target
+            except OSError:
+                continue
+        return None
+
     def is_suspended(self, target: WindowInfo) -> bool:
         return window_api.is_minimized(target.hwnd) or window_api.is_maximized(target.hwnd)
 

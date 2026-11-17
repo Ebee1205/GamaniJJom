@@ -41,6 +41,7 @@ class TrayController(QObject):
         self.programs.quit_requested.connect(self.request_quit)
         self.tray = TrayWidget(self)
         self.tray.toolbar_requested.connect(lambda: self.ensure_toolbar().recover_toolbar())
+        self.tray.toolbar_mode_requested.connect(self.set_toolbar_mode)
         self.tray.attach_requested.connect(self.show_picker)
         self.tray.programs_requested.connect(self.programs.show)
         self.tray.settings_requested.connect(self.settings.show)
@@ -163,6 +164,15 @@ class TrayController(QObject):
         if self.log is not None:
             self.log.debug("TRAY", f">> Target selection requested")
         self.programs.show_picker()
+
+    def set_toolbar_mode(self, mode):
+        try:
+            self.ensure_toolbar().switch_renderer(mode)
+        except (ValueError, OSError) as error:
+            self.notify(str(error))
+            actual = self.ensure_toolbar().window.mode
+            for action in self.tray.shape_actions.actions():
+                action.setChecked(action.data() == actual)
 
     def ensure_toolbar(self):
         if self.toolbar_controller is None:

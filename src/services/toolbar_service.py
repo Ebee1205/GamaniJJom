@@ -21,6 +21,7 @@ class ToolbarService:
         self._deadline = None
         self._mouse_was_down = True
         self.relative_order_limited = False
+        self.radial = False
 
     def inspect(self, target: WindowInfo, *, interaction_handles=()) -> WindowState:
         return self.windows.inspect(target, interaction_handles=interaction_handles)
@@ -90,6 +91,12 @@ class ToolbarService:
     def place_candidate(handle, rect):
         window_api.set_rect(handle, rect)
 
+    def place_picker(self, handle, x, y):
+        rect = self.toolbar_rect(handle)
+        monitor = window_api.monitor_at(x, y)
+        x, y = clamp_position(x, y, rect, monitor.work_area)
+        window_api.place_toolbar(handle, x, y)
+
     def confirm_candidate(self, target, rect):
         if (not window_api.is_regular_window(target.hwnd)
                 or window_api.is_minimized(target.hwnd)):
@@ -122,6 +129,17 @@ class ToolbarService:
             placement = state.maximized_placement if snapshot.maximized else state.normal_placement
             x, y = attached_position(snapshot.target.rect, toolbar, placement, monitor.scale,
                                      maximized=snapshot.maximized)
+            if self.radial and not snapshot.maximized:
+                # HTML positions the circle's center directly on the target edge.
+                edge = placement.edge.value if placement is not None else 'right'
+                if edge == 'top':
+                    y += toolbar.height // 2
+                elif edge == 'bottom':
+                    y -= toolbar.height // 2
+                elif edge == 'left':
+                    x += toolbar.width // 2
+                else:
+                    x -= toolbar.width // 2
         else:
             monitors = window_api.available_monitors()
             position = state.free_position

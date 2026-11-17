@@ -169,6 +169,7 @@ _get_window = _bind(user32, "GetWindow", [wt.HWND, wt.UINT], wt.HWND)
 _get_window_long = _bind(user32, "GetWindowLongW", [wt.HWND, ctypes.c_int], wt.LONG)
 _get_text_length = _bind(user32, "GetWindowTextLengthW", [wt.HWND], ctypes.c_int)
 _get_text = _bind(user32, "GetWindowTextW", [wt.HWND, wt.LPWSTR, ctypes.c_int], ctypes.c_int)
+_get_class_name = _bind(user32, "GetClassNameW", [wt.HWND, wt.LPWSTR, ctypes.c_int], ctypes.c_int)
 _get_process_id = _bind(user32, "GetWindowThreadProcessId",
                         [wt.HWND, ctypes.POINTER(wt.DWORD)], wt.DWORD)
 _get_window_rect = _bind(user32, "GetWindowRect", [wt.HWND, ctypes.POINTER(wt.RECT)], wt.BOOL)
@@ -214,6 +215,10 @@ def _is_cloaked(hwnd: int) -> bool:
 
 def is_regular_window(hwnd: int) -> bool:
     if not _is_window(hwnd) or not _is_window_visible(hwnd):
+        return False
+    class_name = ctypes.create_unicode_buffer(256)
+    _get_class_name(hwnd, class_name, len(class_name))
+    if class_name.value in ('Progman', 'WorkerW', 'Shell_TrayWnd', 'Shell_SecondaryTrayWnd'):
         return False
     ex_style = _get_window_long(hwnd, window_enum.WindowLongIndex.EXTENDED_STYLE)
     if ex_style & window_enum.WindowExtendedStyle.TOOLWINDOW:

@@ -1,5 +1,6 @@
 """Tray icon and menus. Commands are exposed as signals."""
 from PySide6.QtCore import Signal
+from PySide6.QtGui import QActionGroup
 from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
 from src.ui.resources import icon
@@ -8,6 +9,7 @@ from src.ui.resources import icon
 class TrayWidget(QSystemTrayIcon):
     attach_requested = Signal()
     toolbar_requested = Signal()
+    toolbar_mode_requested = Signal(str)
     programs_requested = Signal()
     settings_requested = Signal()
     connection_requested = Signal(object)
@@ -19,6 +21,16 @@ class TrayWidget(QSystemTrayIcon):
         self.setToolTip("GamaniJJom — 창 컨트롤러")
         self.menu = QMenu()
         self.menu.addAction("툴바 다시 표시", self.toolbar_requested.emit)
+        shapes = self.menu.addMenu("툴바 모양")
+        self.shape_actions = QActionGroup(self)
+        self.shape_actions.setExclusive(True)
+        for label, mode in (("원형", 'circle'), ("막대형", 'bar')):
+            action = shapes.addAction(label)
+            action.setCheckable(True)
+            action.setChecked(mode == 'circle')
+            action.setData(mode)
+            self.shape_actions.addAction(action)
+        self.shape_actions.triggered.connect(lambda action: self.toolbar_mode_requested.emit(action.data()))
         self.menu.aboutToShow.connect(lambda: self.log.debug("TRAY", ">> Tray menu opened") if self.log is not None else None)
         self.menu.triggered.connect(lambda action: self.log.debug("TRAY", ">> Tray menu action selected") if self.log is not None else None)
         self.menu.addAction("프로그램 목록 열기", self.programs_requested.emit)
