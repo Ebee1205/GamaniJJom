@@ -248,12 +248,12 @@ class ToolbarController(QObject):
 
     # ------------------------------------------------------ startup/recovery
 
-    def initialize_startup(self):
+    def initialize_startup(self, anchor_handle=None):
         """Initialize a fresh toolbar once; reopening the picker never resets it."""
         if self._startup_initialized or self.state.connected:
             self.reveal()
             return
-        position = self.tracking.startup_position(self.hwnd)
+        position = self.tracking.startup_position(self.hwnd, anchor_handle)
         self.state = tb_s.ToolbarState(free_position=position)
         self._startup_initialized = True
         self._snapshot = None

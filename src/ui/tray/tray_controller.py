@@ -63,7 +63,7 @@ class TrayController(QObject):
             return False
         self.tray.show()
         self.show_picker()
-        self.ensure_toolbar().initialize_startup()
+        self.ensure_toolbar().initialize_startup(int(self.programs.window.winId()))
         # Reapply presentation once the initial Qt show/layout events settle.
         # This only reveals the current state, so it cannot reset a selection.
         QTimer.singleShot(0, self.reveal_startup_toolbar)

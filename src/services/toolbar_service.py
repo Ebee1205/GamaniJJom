@@ -39,14 +39,27 @@ class ToolbarService:
     def screen_position(self, rect):
         return to_screen_position(rect, self.monitor(rect))
 
-    def startup_position(self, handle):
-        """Place a fresh toolbar inside the primary monitor's top-right corner."""
+    def startup_position(self, handle, anchor_handle=None):
+        """Place a free toolbar just above the picker's top-right corner.
+
+        Use the monitor at that corner, including secondary/negative-coordinate
+        displays. This is only an initial position, never an attachment target.
+        """
         toolbar = self.toolbar_rect(handle)
-        monitor = window_api.available_monitors()[0]
+        anchor = window_api.read_window(anchor_handle).rect if anchor_handle is not None else None
+        monitor = (window_api.monitor_at(anchor.x + anchor.width - 1, anchor.y)
+                   if anchor is not None else window_api.available_monitors()[0])
         area = monitor.work_area
         margin = round(12 * monitor.scale)
-        x, y = clamp_position(area.x + area.width - toolbar.width - margin,
-                              area.y + margin, toolbar, area)
+        if anchor is not None:
+            x = anchor.x + anchor.width - toolbar.width
+            y = anchor.y - toolbar.height - margin
+            if y < area.y:
+                # No room above the picker: avoid its caption buttons.
+                y = anchor.y + round(48 * monitor.scale)
+        else:
+            x, y = area.x + area.width - toolbar.width - margin, area.y + margin
+        x, y = clamp_position(x, y, toolbar, area)
         return to_screen_position(WindowRect(x, y, toolbar.width, toolbar.height), monitor)
 
     def recovery_position(self, handle):
