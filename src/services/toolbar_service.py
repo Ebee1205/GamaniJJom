@@ -1,23 +1,9 @@
 """Native toolbar tracking/placement and pointer picking, independent of Qt."""
 import os
 import time
-from dataclasses import dataclass
 
 from src.adapters.windows import window_api
-from src.models.window_schema import WindowInfo, WindowRect
-
-
-@dataclass(frozen=True)
-class ToolbarState:
-    target: WindowInfo
-    visible: bool
-    minimized: bool
-    active: bool
-    fullscreen: bool
-
-    @property
-    def show_toolbar(self):
-        return self.visible and not self.minimized
+from src.models.window_schema import WindowInfo, WindowRect, WindowState
 
 
 class PickCancelled(Exception):
@@ -29,7 +15,7 @@ class ToolbarService:
         self._deadline = None
         self._mouse_was_down = True
 
-    def inspect(self, target: WindowInfo, *, interaction_handles=()) -> ToolbarState:
+    def inspect(self, target: WindowInfo, *, interaction_handles=()) -> WindowState:
         current = window_api.read_window(target.hwnd)
         if current.identity != target.identity:
             raise OSError("대상 창의 프로세스가 변경되었습니다.")
@@ -39,7 +25,8 @@ class ToolbarService:
                       and current.rect == window_api.monitor_bounds(current.hwnd, work=False))
         foreground = window_api.foreground_window()
         active = foreground == current.hwnd or foreground in interaction_handles
-        return ToolbarState(current, visible, minimized, active, fullscreen)
+        return WindowState(current, visible, minimized, active, fullscreen,
+                           maximized=window_api.is_maximized(current.hwnd))
 
     @staticmethod
     def placement(target: WindowRect, toolbar: WindowRect, area: WindowRect, offset):
