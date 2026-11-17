@@ -1,20 +1,8 @@
 """Toolbar intent, separate from native window observations and Window Lock."""
 from dataclasses import dataclass, field
-from enum import Enum
 
 from src.models.window_schema import WindowRef
-
-
-class ToolbarMode(str, Enum):
-    FREE = "free"
-    ATTACHED = "attached"
-
-
-class ToolbarEdge(str, Enum):
-    TOP = "top"
-    RIGHT = "right"
-    BOTTOM = "bottom"
-    LEFT = "left"
+import src.models.toolbar_enum as toolbar_enum
 
 
 @dataclass(frozen=True)
@@ -26,7 +14,7 @@ class AttachedPlacement:
     inside the target. Clamping must not overwrite this intent.
     """
 
-    edge: ToolbarEdge = ToolbarEdge.TOP
+    edge: toolbar_enum.ToolbarEdge = toolbar_enum.ToolbarEdge.TOP
     offset_dip: float = 0.0
 
 
@@ -53,14 +41,14 @@ class ToolbarState:
     Actual position, visibility, drag previews and lock data live elsewhere.
     """
 
-    mode: ToolbarMode = ToolbarMode.FREE
+    mode: toolbar_enum.ToolbarMode = toolbar_enum.ToolbarMode.FREE
     target: WindowRef | None = None
     normal_placement: AttachedPlacement = field(default_factory=AttachedPlacement)
     maximized_placement: AttachedPlacement | None = None
     free_position: ScreenPosition | None = None
 
     def __post_init__(self) -> None:
-        if self.mode == ToolbarMode.ATTACHED and self.target is None:
+        if self.mode == toolbar_enum.ToolbarMode.ATTACHED and self.target is None:
             raise ValueError("An attached toolbar requires a target window.")
 
     @property
@@ -69,4 +57,4 @@ class ToolbarState:
 
     @property
     def attached(self) -> bool:
-        return self.mode == ToolbarMode.ATTACHED
+        return self.mode == toolbar_enum.ToolbarMode.ATTACHED

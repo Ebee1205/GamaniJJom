@@ -19,12 +19,15 @@ class ToolbarService:
         current = window_api.read_window(target.hwnd)
         if current.identity != target.identity:
             raise OSError("대상 창의 프로세스가 변경되었습니다.")
+        
         visible = window_api.is_visible(current.hwnd)
         minimized = window_api.is_minimized(current.hwnd)
         fullscreen = (not minimized and visible
                       and current.rect == window_api.monitor_bounds(current.hwnd, work=False))
+       
         foreground = window_api.foreground_window()
         active = foreground == current.hwnd or foreground in interaction_handles
+        
         return WindowState(current, visible, minimized, active, fullscreen,
                            maximized=window_api.is_maximized(current.hwnd))
 
@@ -57,18 +60,25 @@ class ToolbarService:
     def poll_pick(self):
         if not self.is_picking:
             return None
+        
         if window_api.key_down(0x1B) or time.monotonic() >= self._deadline:
             self.cancel_pick()
             raise PickCancelled("대상 선택을 취소했습니다.")
+        
         down = window_api.key_down(0x01)
+
         clicked = down and not self._mouse_was_down
         self._mouse_was_down = down
+
         if not clicked:
             return None
         target = window_api.read_window(window_api.window_at_cursor())
+
         if target.pid == os.getpid():
             return None  # Keep the list fallback and cancel controls usable.
+        
         if not target.title.strip() or not window_api.is_regular_window(target.hwnd):
             raise ValueError("연결할 프로그램의 일반 창을 선택하세요.")
+        
         self.cancel_pick()
         return target
