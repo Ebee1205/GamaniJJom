@@ -4,6 +4,11 @@ import time
 
 from src.adapters.windows import window_api
 from src.models.window_schema import WindowInfo, WindowRect, WindowState
+from src.services.window_service import WindowService
+from src.models.toolbar_schema import toolbar_is_topmost
+from src.services.toolbar_layout_service import (
+    attached_position, clamp_position, from_screen_position, snap_candidate, to_screen_position,
+)
 
 
 class PickCancelled(Exception):
@@ -11,25 +16,93 @@ class PickCancelled(Exception):
 
 
 class ToolbarService:
-    def __init__(self):
+    def __init__(self, windows: WindowService | None = None):
+        self.windows = windows if windows is not None else WindowService()
         self._deadline = None
         self._mouse_was_down = True
 
     def inspect(self, target: WindowInfo, *, interaction_handles=()) -> WindowState:
-        current = window_api.read_window(target.hwnd)
-        if current.identity != target.identity:
-            raise OSError("대상 창의 프로세스가 변경되었습니다.")
-        
-        visible = window_api.is_visible(current.hwnd)
-        minimized = window_api.is_minimized(current.hwnd)
-        fullscreen = (not minimized and visible
-                      and current.rect == window_api.monitor_bounds(current.hwnd, work=False))
-       
-        foreground = window_api.foreground_window()
-        active = foreground == current.hwnd or foreground in interaction_handles
-        
-        return WindowState(current, visible, minimized, active, fullscreen,
-                           maximized=window_api.is_maximized(current.hwnd))
+        return self.windows.inspect(target, interaction_handles=interaction_handles)
+
+    @staticmethod
+    def toolbar_rect(handle):
+        return window_api.read_window(handle).rect
+
+    @staticmethod
+    def cursor():
+        return window_api.cursor_position()
+
+    @staticmethod
+    def monitor(rect):
+        return window_api.monitor_at(rect.x, rect.y)
+
+    def screen_position(self, rect):
+        return to_screen_position(rect, self.monitor(rect))
+
+    @staticmethod
+    def snap_disabled():
+        return window_api.key_down(0x12)  # Alt; reevaluated at drop time.
+
+    @staticmethod
+    def drag_cancelled():
+        return window_api.key_down(0x1B)
+
+    @staticmethod
+    def place_raw(handle, rect):
+        window_api.place_toolbar(handle, rect.x, rect.y)
+
+    @staticmethod
+    def place_candidate(handle, rect):
+        window_api.set_rect(handle, rect)
+
+    def confirm_candidate(self, target, rect):
+        if (not window_api.is_regular_window(target.hwnd)
+                or window_api.is_minimized(target.hwnd)):
+            return None
+        return snap_candidate(target, rect, self.monitor(target.rect).scale,
+                              maximized=window_api.is_maximized(target.hwnd))
+
+    def nearest_candidate(self, rect):
+        best, info = None, None
+        # EnumWindows order preserves Z-order tie priority. Do not title-sort.
+        for hwnd in window_api.enumerate_handles():
+            try:
+                if not window_api.is_regular_window(hwnd) or window_api.is_minimized(hwnd):
+                    continue
+                current = window_api.read_window(hwnd)
+                if current.pid == os.getpid():
+                    continue
+                candidate = snap_candidate(current, rect, self.monitor(current.rect).scale,
+                                           maximized=window_api.is_maximized(hwnd))
+            except OSError:
+                continue
+            if candidate is not None and (best is None or candidate.distance_dip < best.distance_dip):
+                best, info = candidate, current
+        return best, info
+
+    def render(self, handle, state, snapshot, *, dragging=False):
+        toolbar = self.toolbar_rect(handle)
+        if state.attached and snapshot is not None:
+            monitor = self.monitor(snapshot.target.rect)
+            placement = state.maximized_placement if snapshot.maximized else state.normal_placement
+            x, y = attached_position(snapshot.target.rect, toolbar, placement, monitor.scale,
+                                     maximized=snapshot.maximized)
+        else:
+            monitors = window_api.available_monitors()
+            position = state.free_position
+            monitor = next((m for m in monitors if position and m.device == position.monitor_id), monitors[0])
+            if position and position.monitor_id == monitor.device:
+                x, y = from_screen_position(position, monitor)
+            else:
+                x, y = (monitor.work_area.x + monitor.work_area.width - toolbar.width - 12,
+                        monitor.work_area.y + 12)
+        if state.attached or not dragging:
+            x, y = clamp_position(x, y, toolbar, monitor.work_area)
+        if (x, y) != (toolbar.x, toolbar.y):
+            window_api.place_toolbar(handle, x, y)
+        window_api.set_toolbar_order(handle, topmost=toolbar_is_topmost(state, dragging=dragging),
+                                     target=state.target.hwnd if state.attached else None)
+        return WindowRect(x, y, toolbar.width, toolbar.height)
 
     @staticmethod
     def placement(target: WindowRect, toolbar: WindowRect, area: WindowRect, offset):

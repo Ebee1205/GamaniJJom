@@ -1,26 +1,31 @@
 """Drag handle, action buttons and their menu. No service or native API calls."""
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QMenu
 
 from src.ui.cmm.cmm_button import CmmButton
 
 
 class DragHandle(QLabel):
-    dragged = Signal(int, int)
+    dragged = Signal(int, int)  # Compatibility signal; controller uses gesture boundaries.
+    drag_started = Signal()
+    drag_moved = Signal()
+    drag_finished = Signal()
+    drag_cancelled = Signal()
 
     def __init__(self, parent=None):
         super().__init__("⠿", parent)
         self.log = None
         self.setObjectName("dragHandle")
         self.setFixedWidth(18)
-        self.setToolTip("드래그하여 컨트롤러 위치 조정")
-        self.setAccessibleName("컨트롤러 이동 핸들")
+        self.setToolTip("드래그하여 이동 · Alt: 점착 억제 · Esc: 드래그 취소")
+        self.setAccessibleName("툴바 이동 손잡이")
         self.setCursor(Qt.CursorShape.SizeAllCursor)
         self._previous = None
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self._previous = event.globalPosition().toPoint()
+            self.drag_started.emit()
             event.accept()
         else:
             super().mousePressEvent(event)
@@ -31,12 +36,28 @@ class DragHandle(QLabel):
             delta = point - self._previous
             self._previous = point
             self.dragged.emit(delta.x(), delta.y())
+            self.drag_moved.emit()
             event.accept()
 
     def mouseReleaseEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
+        if event.button() == Qt.MouseButton.LeftButton and self._previous is not None:
             self._previous = None
-        super().mouseReleaseEvent(event)
+            self.drag_finished.emit()
+            event.accept()
+        else:
+            super().mouseReleaseEvent(event)
+
+    def cancel_drag(self):
+        if self._previous is not None:
+            self._previous = None
+            if self.mouseGrabber() is self:
+                self.releaseMouse()
+            self.drag_cancelled.emit()
+
+    def event(self, event):
+        if event.type() in (QEvent.Type.UngrabMouse, QEvent.Type.Hide):
+            self.cancel_drag()
+        return super().event(event)
 
 
 class ToolbarWidget(QFrame):
@@ -51,6 +72,10 @@ class ToolbarWidget(QFrame):
     reset_requested = Signal()
     quit_requested = Signal()
     dragged = Signal(int, int)
+    drag_started = Signal()
+    drag_moved = Signal()
+    drag_finished = Signal()
+    drag_cancelled = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -61,6 +86,10 @@ class ToolbarWidget(QFrame):
         layout.setSpacing(3)
         self.handle = DragHandle(self)
         self.handle.dragged.connect(self.dragged.emit)
+        self.handle.drag_started.connect(self.drag_started.emit)
+        self.handle.drag_moved.connect(self.drag_moved.emit)
+        self.handle.drag_finished.connect(self.drag_finished.emit)
+        self.handle.drag_cancelled.connect(self.drag_cancelled.emit)
         layout.addWidget(self.handle)
         self.lock_button = CmmButton("unlock", "현재 위치·크기 고정", self, checkable=True)
         self.pin_button = CmmButton("pin", "툴바 위치 고정 및 항상 위에 표시", self, checkable=True)

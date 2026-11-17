@@ -2,6 +2,8 @@
 import ctypes
 from ctypes import wintypes as wt
 
+from src.models.toolbar_schema import MonitorGeometry
+
 import src.models.window_enum  as window_enum
 import src.models.window_schema as window_schema
 
@@ -13,6 +15,89 @@ MOVE_FLAGS = (
     | window_enum.SetWindowPosFlag.ASYNCWINDOWPOS
 )
 MIN_TITLE_BUFFER = 512
+
+
+def cursor_position() -> tuple[int, int]:
+    point = wt.POINT()
+    if not _get_cursor_pos(ctypes.byref(point)):
+        raise _last_error()
+    return point.x, point.y
+
+
+def set_toolbar_order(hwnd: int, *, topmost: bool, target: int | None = None) -> None:
+    """Preserve HWND, capture and activation while changing only Z-order."""
+    flags = 0x0001 | 0x0002 | 0x0010 | 0x0200  # NOSIZE, NOMOVE, NOACTIVATE, NOOWNERZORDER
+
+    def place(after):
+        if not _set_window_pos(hwnd, after, 0, 0, 0, 0, flags):
+            raise _last_error()
+
+    if topmost:
+        place(-1)  # HWND_TOPMOST
+        return
+    target_topmost = target and bool(_get_window_long(target, -20) & 0x8)
+    if not target_topmost and _get_window_long(hwnd, -20) & 0x8:
+        place(-2)  # HWND_NOTOPMOST
+    if target and _is_window(target):
+        previous = int(_get_window(target, 3) or 0)  # GW_HWNDPREV
+        if previous and not target_topmost and _get_window_long(previous, -20) & 0x8:
+            previous = 0  # Top of the non-topmost band, below any topmost windows.
+        if previous != hwnd:
+            place(previous)  # HWND_TOP when there is no preceding window
+    elif not target:
+        place(-2)
+
+
+class _MonitorInfoEx(ctypes.Structure):
+    _fields_ = [("size", wt.DWORD), ("monitor", wt.RECT), ("work", wt.RECT),
+                ("flags", wt.DWORD), ("device", wt.WCHAR * 32)]
+
+
+def _monitor_geometry(handle) -> MonitorGeometry:
+    info = _MonitorInfoEx()
+    info.size = ctypes.sizeof(info)
+    get_info = _bind(user32, "GetMonitorInfoW", [wt.HANDLE, wt.LPVOID], wt.BOOL)
+    if not get_info(handle, ctypes.byref(info)):
+        raise _last_error()
+    get_scale = _bind(ctypes.WinDLL("shcore"), "GetScaleFactorForMonitor",
+                      [wt.HANDLE, ctypes.POINTER(ctypes.c_int)], wt.LONG)
+    scale = ctypes.c_int()
+    result = get_scale(handle, ctypes.byref(scale))
+    if result != 0:
+        raise OSError(f"Monitor scale query failed: {result}")
+
+    def rect(r):
+        return window_schema.WindowRect(r.left, r.top, r.right - r.left, r.bottom - r.top)
+
+    return MonitorGeometry(info.device, rect(info.monitor), rect(info.work), scale.value / 100)
+
+
+def monitor_at(x: int, y: int) -> MonitorGeometry:
+    get_monitor = _bind(user32, "MonitorFromPoint", [wt.POINT, wt.DWORD], wt.HANDLE)
+    return _monitor_geometry(get_monitor(wt.POINT(x, y), 2))
+
+
+def available_monitors() -> list[MonitorGeometry]:
+    monitors = []
+    callback_type = ctypes.WINFUNCTYPE(wt.BOOL, wt.HANDLE, wt.HDC,
+                                      ctypes.POINTER(wt.RECT), wt.LPARAM)
+    error = []
+
+    @callback_type
+    def collect(handle, _dc, _rect, _data):
+        try:
+            monitors.append(_monitor_geometry(handle))
+        except OSError as failure:
+            error.append(failure)
+            return False
+        return True
+
+    enum = _bind(user32, "EnumDisplayMonitors", [wt.HDC, wt.LPVOID, callback_type, wt.LPARAM], wt.BOOL)
+    if not enum(None, None, collect, 0):
+        raise error[0] if error else _last_error()
+    # MONITOR_DEFAULTTOPRIMARY gives the primary monitor for this offscreen rect.
+    primary = _monitor_geometry(_monitor_from_window(None, 1))
+    return sorted(monitors, key=lambda monitor: monitor.device != primary.device)
 
 # ---- Win32 bindings --------------------------------------------------------
 user32 = ctypes.WinDLL("user32", use_last_error=True)
@@ -100,14 +185,22 @@ def _read_title(hwnd: int) -> str:
 
 def read_window(hwnd: int) -> window_schema.WindowInfo:
     if not _is_window(hwnd):
-        raise OSError("대상 창이 종료되었습니다. 목록을 새로고침하세요.")
+        raise window_schema.WindowClosedError("대상 창이 종료되었습니다. 목록을 새로고침하세요.")
     pid = wt.DWORD()
     if not _get_process_id(hwnd, ctypes.byref(pid)):
         raise _last_error()
     rect = wt.RECT()
     if not _get_window_rect(hwnd, ctypes.byref(rect)):
         raise _last_error()
-    return window_schema.WindowInfo(hwnd, pid.value, _read_title(hwnd),
+    title = _read_title(hwnd)
+    confirmed_pid = wt.DWORD()
+    if not _is_window(hwnd):
+        raise window_schema.WindowClosedError("Target window closed during inspection.")
+    if not _get_process_id(hwnd, ctypes.byref(confirmed_pid)):
+        raise _last_error()
+    if confirmed_pid.value != pid.value:
+        raise window_schema.WindowClosedError("Target window identity changed during inspection.")
+    return window_schema.WindowInfo(hwnd, pid.value, title,
                       window_schema.WindowRect(rect.left, rect.top,
                                  rect.right - rect.left, rect.bottom - rect.top))
 
@@ -197,3 +290,20 @@ def monitor_bounds(hwnd: int, *, work: bool = True) -> window_schema.WindowRect:
         raise _last_error()
     r = info.work if work else info.monitor
     return window_schema.WindowRect(r.left, r.top, r.right - r.left, r.bottom - r.top)
+
+
+def is_fullscreen(target: window_schema.WindowInfo, *, minimized: bool,
+                  maximized: bool, visible: bool) -> bool:
+    """Heuristic for borderless fullscreen; maximized windows stay distinct."""
+    if minimized or maximized or not visible:
+        return False
+    style = _get_window_long(target.hwnd, window_enum.WindowLongIndex.STYLE)
+    if style & (window_enum.WindowStyle.CAPTION | window_enum.WindowStyle.THICKFRAME):
+        return False
+    bounds = monitor_bounds(target.hwnd, work=False)
+    rect = target.rect
+    return all(abs(a - b) <= 1 for a, b in (
+        (rect.x, bounds.x), (rect.y, bounds.y),
+        (rect.x + rect.width, bounds.x + bounds.width),
+        (rect.y + rect.height, bounds.y + bounds.height),
+    ))

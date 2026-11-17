@@ -1,8 +1,29 @@
 """Toolbar intent, separate from native window observations and Window Lock."""
 from dataclasses import dataclass, field
 
-from src.models.window_schema import WindowRef
+from src.models.window_schema import WindowRef, WindowRect
 import src.models.toolbar_enum as toolbar_enum
+
+
+@dataclass(frozen=True)
+class MonitorGeometry:
+    device: str
+    bounds: WindowRect
+    work_area: WindowRect
+    scale: float
+
+
+@dataclass(frozen=True)
+class DragSession:
+    """Transient gesture; dragging always overrides normal Z-order to topmost."""
+
+    cursor_start: tuple[int, int]
+    toolbar_start: WindowRect
+    scale_start: float
+
+
+def toolbar_is_topmost(state: "ToolbarState", *, dragging: bool) -> bool:
+    return dragging or not state.attached
 
 
 @dataclass(frozen=True)

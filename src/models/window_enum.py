@@ -3,7 +3,27 @@ from enum import IntEnum, IntFlag
 
 
 class WindowLongIndex(IntEnum):
+    STYLE = -16
     EXTENDED_STYLE = -20
+
+
+class WindowStyle(IntFlag):
+    CAPTION = 0x00C00000
+    THICKFRAME = 0x00040000
+
+
+class WindowEvent(IntEnum):
+    FOREGROUND = 0x0003
+    MINIMIZE_START = 0x0016
+    MINIMIZE_END = 0x0017
+    DESTROY = 0x8001
+    SHOW = 0x8002
+    HIDE = 0x8003
+    STATE_CHANGE = 0x800A
+    LOCATION_CHANGE = 0x800B
+    NAME_CHANGE = 0x800C
+    CLOAKED = 0x8017
+    UNCLOAKED = 0x8018
 
 
 class GetWindowCommand(IntEnum):

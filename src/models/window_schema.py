@@ -2,6 +2,10 @@
 from dataclasses import dataclass
 
 
+class WindowClosedError(OSError):
+    """The target no longer exists or its HWND belongs to another process."""
+
+
 @dataclass(frozen=True)
 class WindowRef:
     """Runtime window identity, independent of its changing title and bounds."""

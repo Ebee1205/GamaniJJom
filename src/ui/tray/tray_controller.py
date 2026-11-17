@@ -2,6 +2,8 @@
 from PySide6.QtCore import QObject, QTimer
 from PySide6.QtWidgets import QMessageBox, QSystemTrayIcon
 
+from src.models.toolbar_event_schema import TargetClosed
+
 from src.ui.tray.tray_widget import TrayWidget
 from src.ui.wd_size.wd_size_controller import WdSizeController
 from src.ui.toolbar.toolbar_controller import ToolbarController
@@ -23,6 +25,7 @@ class TrayController(QObject):
         self.capture = capture
         self.tracking = tracking
         self.controllers = {}
+        self.toolbar_controller = None
         self.programs = WdSizeController(windows, attachments, self)
         self.settings = SettingsController(SettingDialog(self.programs.window), ctx, self)
         self.settings.config_changed.connect(self.apply_settings)
@@ -57,6 +60,7 @@ class TrayController(QObject):
             return False
         self.tray.show()
         self.timer.start()
+        self.ensure_toolbar().reveal()
         self.show_picker()
         return True
 
@@ -89,60 +93,52 @@ class TrayController(QObject):
             self.log.debug("TRAY", f">> Target selection requested")
         self.programs.show_picker()
 
-    def attach(self, target):
-        if self.log is not None:
-            self.log.debug("TRAY", f">> Attachment requested hwnd={target.handle_text} pid={target.pid}")
-        try:
-            attachment = self.attachments.attach(target)
-        except (ValueError, OSError) as error:
-            if self.log is not None:
-                self.log.debug("TRAY", f"<< UI operation ended error_type={type(error).__name__}")
-            self.programs.window.status.setText(str(error))
-            return
-        key = attachment.target.identity
-        attachment.hidden = False
-        if self.controllers:
-            controller = next(iter(self.controllers.values()))
-            if controller.attachment.target.identity != key:
-                self.locks.release(controller.attachment)
-                controller.window.toolbar.menu.hide()
-                self.programs.verify_timer.stop()
-                self.programs.pending = None
-                self.programs.position.hide()
-                controller.attachment = attachment
-                controller.window.setWindowTitle(f"GamaniJJom — {attachment.target.title}")
-                controller.sync()
-                self.controllers.clear()
-                self.controllers[key] = controller
-                if self.log is not None:
-                    self.log.debug("TRAY", f"!! Controller target changed hwnd={attachment.target.handle_text} pid={attachment.target.pid}")
-        else:
-            window = ToolbarWindow(attachment.target.title)
-            controller = ToolbarController(window, attachment, self.locks, self.capture,
+    def ensure_toolbar(self):
+        if self.toolbar_controller is None:
+            window = ToolbarWindow()
+            controller = ToolbarController(window, None, self.locks, self.capture,
                                            self.tracking, self.windows, self)
             controller.notification.connect(self.notify)
             controller.capture_completed.connect(self.notify_capture)
             controller.position_requested.connect(self.programs.show_position)
             controller.settings_requested.connect(self.settings.show)
             controller.attach_requested.connect(self.show_picker)
-            controller.detach_requested.connect(self.detach)
+            controller.connection_changed.connect(self.on_connection_changed)
             controller.changed.connect(self.refresh_views)
             controller.quit_requested.connect(self.request_quit)
-            self.controllers[key] = controller
-        self.refresh_views()
-        self.controllers[key].update()
-        self.programs.window.window_list.select_identity(key)
-        self.notify("선택한 프로그램에 컨트롤러를 계속 표시합니다. 다른 프로그램을 연결하면 대상이 변경됩니다.")
+            self.toolbar_controller = controller
+        return self.toolbar_controller
 
-    def detach(self, key):
-        if self.log is not None:
-            self.log.debug("TRAY", f"-- Attachment removal requested hwnd={key[0]} pid={key[1]}")
-        controller = self.controllers.pop(key, None)
-        if controller:
-            controller.dispose()
-        self.attachments.detach(key)
+    def on_connection_changed(self):
+        controller = self.toolbar_controller
+        self.controllers.clear()
+        if controller is not None and controller.attachment is not None:
+            self.controllers[controller.attachment.target.identity] = controller
+        self.programs.verify_timer.stop()
+        self.programs.pending = None
+        self.programs.position.set_busy(False)
+        self.programs.position.hide()
         if not self._closed:
             self.refresh_views()
+
+    def attach(self, target):
+        try:
+            controller = self.ensure_toolbar()
+            controller.select_target(target)
+        except (ValueError, OSError) as error:
+            self.notify(str(error))
+            return
+        if controller.attachment is not None:
+            self.programs.window.window_list.select_identity(controller.attachment.target.identity)
+        self.refresh_views()
+
+    def detach(self, key):
+        # Disconnecting never destroys the singleton toolbar.
+        controller = self.toolbar_controller
+        if controller is not None and controller.attachment is not None:
+            if controller.attachment.target.identity == key:
+                controller.dispatch(TargetClosed(controller.state.target, controller.current_position()))
+                controller.update()
 
     def show_connection(self, key):
         if self.log is not None:
@@ -161,8 +157,8 @@ class TrayController(QObject):
         self.refresh_views()
 
     def tick(self):
-        for controller in list(self.controllers.values()):
-            controller.update()
+        if self.toolbar_controller is not None:
+            self.toolbar_controller.update()
 
     def request_quit(self):
         if self._closed or self._confirming_quit or self._quit_confirmed:
@@ -200,7 +196,9 @@ class TrayController(QObject):
         self.timer.stop()
         self.tray.hide()
         self.tray.menu.hide()
-        for key in list(self.controllers):
-            self.detach(key)
+        if self.toolbar_controller is not None:
+            self.toolbar_controller.dispose()
+        self.controllers.clear()
+        self.attachments.attachments.clear()
         self.settings.dispose()
         self.programs.shutdown()

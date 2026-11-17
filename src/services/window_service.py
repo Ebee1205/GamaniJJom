@@ -1,7 +1,8 @@
 """Window operations shared by the UI and future multi-window locking policies."""
 import os
+from dataclasses import replace
 
-from src.models.window_schema import WindowInfo, WindowRect
+from src.models.window_schema import WindowClosedError, WindowInfo, WindowRect, WindowState
 from src.adapters.windows import window_api
 from src.adapters.windows import window_finder
 
@@ -29,11 +30,27 @@ class WindowService:
 
     def read(self, target: WindowInfo) -> WindowInfo:
         current = window_api.read_window(target.hwnd)
-        if current.pid != target.pid:
-            raise OSError("대상 창이 다른 프로세스로 바뀌었습니다. 다시 선택하세요.")
-        if not window_api.is_regular_window(target.hwnd):
-            raise OSError("대상 창을 사용할 수 없습니다. 목록을 새로고침하세요.")
+        if current.identity != target.identity:
+            raise WindowClosedError("Target window identity changed. Select the window again.")
+        # Discovery eligibility (visible/listable) is not connection validity.
+        # Hidden and cloaked windows remain valid connected targets.
         return current
+
+    def inspect(self, target: WindowInfo, *, interaction_handles=()) -> WindowState:
+        current = self.read(target)
+        minimized = window_api.is_minimized(current.hwnd)
+        maximized = window_api.is_maximized(current.hwnd)
+        visible = window_api.is_visible(current.hwnd)
+        # GetWindowRect may report minimized coordinates such as -32000.
+        # Keep the last accepted rectangle; restoration reads actual bounds.
+        if minimized:
+            current = replace(current, rect=target.rect)
+        fullscreen = window_api.is_fullscreen(
+            current, minimized=minimized, maximized=maximized, visible=visible,
+        )
+        foreground = window_api.foreground_window()
+        active = foreground == current.hwnd or foreground in interaction_handles
+        return WindowState(current, visible, minimized, active, fullscreen, maximized)
 
     def apply(self, target: WindowInfo, rect: WindowRect) -> None:
         _validate_rect(rect)
