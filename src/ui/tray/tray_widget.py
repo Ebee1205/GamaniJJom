@@ -7,6 +7,7 @@ from src.ui.resources import icon
 
 class TrayWidget(QSystemTrayIcon):
     attach_requested = Signal()
+    toolbar_requested = Signal()
     programs_requested = Signal()
     settings_requested = Signal()
     connection_requested = Signal(object)
@@ -17,6 +18,7 @@ class TrayWidget(QSystemTrayIcon):
         self.log = parent.ctx.log if parent is not None else None
         self.setToolTip("GamaniJJom — 창 컨트롤러")
         self.menu = QMenu()
+        self.menu.addAction("툴바 다시 표시", self.toolbar_requested.emit)
         self.menu.aboutToShow.connect(lambda: self.log.debug("TRAY", ">> Tray menu opened") if self.log is not None else None)
         self.menu.triggered.connect(lambda action: self.log.debug("TRAY", ">> Tray menu action selected") if self.log is not None else None)
         self.menu.addAction("프로그램 목록 열기", self.programs_requested.emit)

@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QPlainTextEdit,
     QPushButton,
     QSplitter,
     QVBoxLayout,
@@ -49,6 +50,7 @@ class ProgramsWindow(QWidget):
         root.addLayout(self._build_header())
         root.addWidget(self._build_splitter())
         root.addWidget(self._build_status_label())
+        root.addWidget(self._build_debug_panel())
 
         self._connect_signals()
         self._setup_shortcuts()
@@ -139,6 +141,33 @@ class ProgramsWindow(QWidget):
         self.status.setObjectName("status")
         self.status.setWordWrap(True)
         return self.status
+
+    def _build_debug_panel(self):
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self.debug_toggle = QPushButton("디버그 정보 표시")
+        self.debug_toggle.setCheckable(True)
+        self.debug_toggle.toggled.connect(self._set_debug_visible)
+        layout.addWidget(self.debug_toggle, 0, Qt.AlignmentFlag.AlignLeft)
+
+        self.debug_view = QPlainTextEdit()
+        self.debug_view.setObjectName("debugView")
+        self.debug_view.setReadOnly(True)
+        self.debug_view.setMaximumHeight(180)
+        self.debug_view.setPlaceholderText("디버그 상태가 아직 없습니다.")
+        self.debug_view.hide()
+        layout.addWidget(self.debug_view)
+        return panel
+
+    def _set_debug_visible(self, visible):
+        self.debug_view.setVisible(visible)
+        self.debug_toggle.setText("디버그 정보 숨기기" if visible else "디버그 정보 표시")
+
+    def set_debug_info(self, text):
+        if self.debug_view.toPlainText() != text:
+            self.debug_view.setPlainText(text)
 
     @staticmethod
     def _make_title_row(title_text, count_label):

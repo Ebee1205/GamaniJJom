@@ -39,6 +39,27 @@ class ToolbarService:
     def screen_position(self, rect):
         return to_screen_position(rect, self.monitor(rect))
 
+    def startup_position(self, handle):
+        """Place a fresh toolbar inside the primary monitor's top-right corner."""
+        toolbar = self.toolbar_rect(handle)
+        monitor = window_api.available_monitors()[0]
+        area = monitor.work_area
+        margin = round(12 * monitor.scale)
+        x, y = clamp_position(area.x + area.width - toolbar.width - margin,
+                              area.y + margin, toolbar, area)
+        return to_screen_position(WindowRect(x, y, toolbar.width, toolbar.height), monitor)
+
+    def recovery_position(self, handle):
+        """An explicit recovery action places the toolbar on the cursor's monitor."""
+        toolbar = self.toolbar_rect(handle)
+        x, y = self.cursor()
+        monitor = window_api.monitor_at(x, y)
+        area = monitor.work_area
+        x = area.x + (area.width - toolbar.width) // 2
+        y = area.y + round(48 * monitor.scale)
+        x, y = clamp_position(x, y, toolbar, area)
+        return to_screen_position(WindowRect(x, y, toolbar.width, toolbar.height), monitor)
+
     @staticmethod
     def snap_disabled():
         return window_api.key_down(0x12)  # Alt; reevaluated at drop time.
@@ -94,8 +115,9 @@ class ToolbarService:
             if position and position.monitor_id == monitor.device:
                 x, y = from_screen_position(position, monitor)
             else:
-                x, y = (monitor.work_area.x + monitor.work_area.width - toolbar.width - 12,
-                        monitor.work_area.y + 12)
+                margin = round(12 * monitor.scale)
+                x, y = (monitor.work_area.x + monitor.work_area.width - toolbar.width - margin,
+                        monitor.work_area.y + margin)
         if state.attached or not dragging:
             x, y = clamp_position(x, y, toolbar, monitor.work_area)
         if (x, y) != (toolbar.x, toolbar.y):

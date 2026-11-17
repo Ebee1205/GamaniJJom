@@ -2,7 +2,6 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QWidget
 
-
 from src.ui.toolbar.toolbar_widget import ToolbarWidget
 
 
@@ -22,6 +21,14 @@ class ToolbarWindow(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.toolbar)
         self.setFixedSize(self.sizeHint())
+
+    def ensure_visible(self):
+        # show() preserves WindowMinimized, leaving an apparently visible QWidget
+        # at native minimized coordinates. Restore only this toolbar window.
+        if self.isMinimized():
+            self.showNormal()
+        else:
+            self.show()
 
     def show_candidate(self, rect):
         if rect is None:

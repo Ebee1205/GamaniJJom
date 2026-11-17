@@ -1,4 +1,6 @@
 """Own application lifetime, registry, tray commands and per-target controllers."""
+import os
+
 from PySide6.QtCore import QObject, QTimer
 from PySide6.QtWidgets import QMessageBox, QSystemTrayIcon
 
@@ -38,6 +40,7 @@ class TrayController(QObject):
         self.programs.notification.connect(self.notify)
         self.programs.quit_requested.connect(self.request_quit)
         self.tray = TrayWidget(self)
+        self.tray.toolbar_requested.connect(lambda: self.ensure_toolbar().recover_toolbar())
         self.tray.attach_requested.connect(self.show_picker)
         self.tray.programs_requested.connect(self.programs.show)
         self.tray.settings_requested.connect(self.settings.show)
@@ -59,10 +62,17 @@ class TrayController(QObject):
             QMessageBox.critical(None, "GamaniJJom", "시스템 트레이를 사용할 수 없어 종료합니다.")
             return False
         self.tray.show()
-        self.timer.start()
-        self.ensure_toolbar().reveal()
         self.show_picker()
+        self.ensure_toolbar().initialize_startup()
+        # Reapply presentation once the initial Qt show/layout events settle.
+        # This only reveals the current state, so it cannot reset a selection.
+        QTimer.singleShot(0, self.reveal_startup_toolbar)
+        self.timer.start()
         return True
+
+    def reveal_startup_toolbar(self):
+        if not self._closed and self.toolbar_controller is not None:
+            self.toolbar_controller.reveal()
 
     def apply_settings(self):
         """Refresh shared runtime services after a successful settings save."""
@@ -87,6 +97,67 @@ class TrayController(QObject):
     def refresh_views(self):
         self.programs.refresh()
         self.tray.set_connections(list(self.attachments.attachments.values()))
+        self.update_debug_info()
+
+    def update_debug_info(self):
+        toolbar = self.toolbar_controller
+        attachments = self.attachments.attachments
+        lines = [
+            "Application",
+            f"  name={self.app.applicationName() or 'GamaniJJom'} pid={os.getpid()}",
+            f"  lifecycle={'closing' if self._closed else 'running'} "
+            f"quit_confirming={self._confirming_quit} quit_confirmed={self._quit_confirmed}",
+            f"  system_tray_available={QSystemTrayIcon.isSystemTrayAvailable()} "
+            f"tray_visible={self.tray.isVisible()}",
+            f"  program_window_visible={self.programs.window.isVisible()} "
+            f"active={self.programs.window.isActiveWindow()}",
+            f"  timers=main:{self.timer.isActive()} "
+            f"window_refresh:{self.programs.refresh_timer.isActive()} "
+            f"position_verify:{self.programs.verify_timer.isActive()}",
+            f"  attachments={len(attachments)} controller_registry={len(self.controllers)} "
+            f"position_pending={self.programs.pending is not None}",
+            "",
+            "Toolbar",
+        ]
+
+        if toolbar is None:
+            lines.append("  controller=not-created")
+        else:
+            state = toolbar.state
+            attachment = toolbar.attachment
+            target = attachment.target if attachment is not None else None
+            snapshot = toolbar.snapshot
+            target_text = (f"{state.target.hwnd:#x} pid={state.target.pid}"
+                           if state.target is not None else "none")
+            lines.extend((
+                f"  controller=created visible={toolbar.window.isVisible()} "
+                f"dragging={toolbar.dragging} disposed={toolbar.disposed}",
+                f"  mode={state.mode.value} connected={state.connected} attached={state.attached}",
+                f"  target={target_text} "
+                f"title={repr(target.title) if target else '—'}",
+                f"  lock={'locked' if attachment and attachment.locked_rect else 'unlocked'} "
+                f"locked_rect={attachment.locked_rect if attachment else None}",
+                f"  free_position={state.free_position!r}",
+                f"  normal_placement={state.normal_placement.edge.value}:"
+                f"{state.normal_placement.offset_dip:g}dip "
+                f"maximized_placement={state.maximized_placement!r}",
+                f"  last_presented={toolbar._last_presented!r}",
+                f"  snapshot={self._format_window_snapshot(snapshot)}",
+                f"  inspection_error={toolbar._inspection_errors.last!r} "
+                f"placement_error={toolbar._placement_errors.last!r}",
+            ))
+
+        self.programs.window.set_debug_info("\n".join(lines))
+
+    @staticmethod
+    def _format_window_snapshot(snapshot):
+        if snapshot is None:
+            return "not-observed"
+        return (
+            f"visible={snapshot.visible} minimized={snapshot.minimized} "
+            f"active={snapshot.active} maximized={snapshot.maximized} "
+            f"fullscreen={snapshot.fullscreen} title={snapshot.target.title!r}"
+        )
 
     def show_picker(self):
         if self.log is not None:
@@ -159,6 +230,7 @@ class TrayController(QObject):
     def tick(self):
         if self.toolbar_controller is not None:
             self.toolbar_controller.update()
+        self.update_debug_info()
 
     def request_quit(self):
         if self._closed or self._confirming_quit or self._quit_confirmed:

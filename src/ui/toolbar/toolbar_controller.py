@@ -1,19 +1,38 @@
 """One toolbar: dispatch policy events, apply lock effects and render intent."""
-from dataclasses import replace
-
 from PySide6.QtCore import QObject, QTimer, Qt, Signal
 
 from src.adapters.windows.window_event_watcher import WindowEventWatcher
+import src.models.toolbar_event_schema as tb_es
+import src.models.toolbar_schema as tb_s
 from src.models.attachment import Attachment
-from src.models.toolbar_enum import ToolbarEdge
-from src.models.toolbar_event_schema import (
-    AttachedDragged, DetachClicked, FreeMoved, PlacementReset, TargetClosed, TargetSelected,
-    TargetStateObserved, ToolbarDropped,
-)
-from src.models.toolbar_schema import AttachedPlacement, DragSession, ToolbarState
 from src.models.window_enum import WindowEvent
-from src.models.window_schema import WindowClosedError, WindowRect
+from src.models.window_schema import WindowClosedError
 from src.services.toolbar_state_service import reduce_toolbar
+from src.ui.toolbar.toolbar_drag_gesture import ToolbarDragGesture
+
+EVENT_COALESCE_INTERVAL_MS = 16
+NO_TARGET_MESSAGE = "연결된 대상 창이 없습니다."
+
+
+class _ErrorGate:
+    """Lets the same error message through only once until `clear()` is called."""
+
+    def __init__(self):
+        self._last = None
+
+    @property
+    def last(self):
+        return self._last
+
+    def is_new(self, error):
+        message = str(error)
+        if message == self._last:
+            return False
+        self._last = message
+        return True
+
+    def clear(self):
+        self._last = None
 
 
 class ToolbarController(QObject):
@@ -28,6 +47,8 @@ class ToolbarController(QObject):
     changed = Signal()
     quit_requested = Signal()
 
+    # ------------------------------------------------------------------ setup
+
     def __init__(self, window, attachment, lock_service, capture_service, toolbar_service, window_service, parent=None):
         super().__init__(parent)
         self.log = parent.ctx.log if parent is not None else None
@@ -35,99 +56,154 @@ class ToolbarController(QObject):
         self.window, self.attachment = window, attachment
         self.locks, self.capture_service = lock_service, capture_service
         self.tracking, self.windows = toolbar_service, window_service
-        self.state = ToolbarState(target=attachment.target.reference if attachment else None)
+        self.state = tb_s.ToolbarState(target=attachment.target.reference if attachment else None)
+
         self._snapshot = None
-        self._drag = None
         self._last_presented = None
-        self._inspection_error = self._placement_error = None
-        self._disposed = self._watch_attempted = False
+        self._presentation_visible = None
+        self._startup_initialized = False
+        self._disposed = False
+        self._watch_attempted = False
+        self._inspection_errors = _ErrorGate()
+        self._placement_errors = _ErrorGate()
+
+        self.drag = ToolbarDragGesture(self)
         self._watcher = WindowEventWatcher(self.window_event_received.emit)
         self._event_timer = QTimer(self)
         self._event_timer.setSingleShot(True)
-        self._event_timer.setInterval(16)
+        self._event_timer.setInterval(EVENT_COALESCE_INTERVAL_MS)
         self._event_timer.timeout.connect(self.update)
-        self._drag_timer = QTimer(self)
-        self._drag_timer.setInterval(16)
-        self._drag_timer.timeout.connect(self.poll_drag)
         self.window_event_received.connect(self.on_window_event, Qt.ConnectionType.QueuedConnection)
-        window.log = self.log
-        toolbar = window.toolbar
-        toolbar.log = self.log
-        toolbar.handle.log = self.log
-        toolbar.pin_button.clicked.connect(self.detach_toolbar)
-        toolbar.lock_requested.connect(self.toggle_lock)
-        toolbar.capture_requested.connect(self.capture)
-        toolbar.position_requested.connect(self.request_position)
-        toolbar.capture_options_requested.connect(lambda: self.notification.emit("캡처 옵션은 준비 중입니다."))
-        toolbar.settings_requested.connect(self.settings_requested.emit)
-        toolbar.attach_requested.connect(self.attach_requested.emit)
-        toolbar.detach_requested.connect(self.detach_toolbar)
-        toolbar.hide_requested.connect(self.reveal)
-        toolbar.reset_requested.connect(self.reset_position)
-        toolbar.quit_requested.connect(self.quit_requested.emit)
-        toolbar.drag_started.connect(self.start_drag)
-        toolbar.drag_moved.connect(self.poll_drag)
-        toolbar.drag_finished.connect(self.finish_drag)
-        toolbar.drag_cancelled.connect(self.cancel_drag)
+
+        self._connect_toolbar_signals()
         self.sync()
+
+    def _connect_toolbar_signals(self):
+        window = self.window
+        toolbar = window.toolbar
+        window.log = toolbar.log = toolbar.handle.log = self.log
+
+        toolbar.pin_button.clicked.connect(self.detach_toolbar)
+        toolbar.capture_options_requested.connect(
+            lambda: self.notification.emit("캡처 옵션은 준비 중입니다."))
+        for signal, slot in (
+            (toolbar.lock_requested, self.toggle_lock),
+            (toolbar.capture_requested, self.capture),
+            (toolbar.position_requested, self.request_position),
+            (toolbar.settings_requested, self.settings_requested.emit),
+            (toolbar.attach_requested, self.attach_requested.emit),
+            (toolbar.detach_requested, self.detach_toolbar),
+            (toolbar.hide_requested, self.reveal),
+            (toolbar.reset_requested, self.reset_position),
+            (toolbar.quit_requested, self.quit_requested.emit),
+            (toolbar.drag_started, self.drag.start),
+            (toolbar.drag_moved, self.drag.poll),
+            (toolbar.drag_finished, self.drag.finish),
+            (toolbar.drag_cancelled, self.drag.cancel),
+        ):
+            signal.connect(slot)
+
+    # ---------------------------------------------------------------- helpers
+
+    @property
+    def hwnd(self):
+        return int(self.window.winId())
+
+    @property
+    def snapshot(self):
+        return self._snapshot
+
+    @property
+    def disposed(self):
+        return self._disposed
 
     @property
     def dragging(self):
-        return self._drag is not None
+        return self.drag.active
+
+    def cancel_drag(self):
+        self.drag.cancel()
+
+    def _debug(self, category, message):
+        if self.log is not None:
+            self.log.debug(category, message)
+
+    def _require_attachment(self):
+        if self.attachment is None:
+            self.notification.emit(NO_TARGET_MESSAGE)
+            return False
+        return True
+
+    # ------------------------------------------------------- policy dispatch
 
     def dispatch(self, event, *, target_info=None):
         transition = reduce_toolbar(self.state, event)
         old_target = self.state.target
-        if transition.state.target != old_target and transition.state.target is not None:
-            if target_info is None or target_info.reference != transition.state.target:
-                raise ValueError("A validated window is required for a new connection.")
-        for effect in transition.effects:
-            if self.attachment is not None and self.attachment.target.reference == effect.target:
-                self.locks.release(self.attachment)
+        new_target = transition.state.target
+        if new_target != old_target:
+            self._validate_new_connection(new_target, target_info)
+
+        self._release_effect_locks(transition.effects)
         self.state = transition.state
         if self.state.target != old_target:
-            if self.dragging:
-                self._end_gesture()
-            self._watcher.close()
-            self._watch_attempted = False
-            self._snapshot = None
-            self.attachment = Attachment(target_info) if target_info is not None else None
-            if self.registry is not None:
-                self.registry.attachments.clear()
-                if self.attachment is not None:
-                    self.registry.attachments[self.attachment.target.identity] = self.attachment
-            self.connection_changed.emit()
-            self.changed.emit()
+            self._switch_target(target_info)
         self.sync()
         return transition
+
+    @staticmethod
+    def _validate_new_connection(new_target, target_info):
+        if new_target is None:
+            return
+        if target_info is None or target_info.reference != new_target:
+            raise ValueError("A validated window is required for a new connection.")
+
+    def _release_effect_locks(self, effects):
+        if self.attachment is None:
+            return
+        for effect in effects:
+            if self.attachment.target.reference == effect.target:
+                self.locks.release(self.attachment)
+
+    def _switch_target(self, target_info):
+        if self.dragging:
+            self.drag.end()
+        self._watcher.close()
+        self._watch_attempted = False
+        self._snapshot = None
+        self.attachment = Attachment(target_info) if target_info is not None else None
+        if self.registry is not None:
+            self.registry.attachments.clear()
+            if self.attachment is not None:
+                self.registry.attachments[self.attachment.target.identity] = self.attachment
+        self.connection_changed.emit()
+        self.changed.emit()
+
+    # ------------------------------------------------------ public commands
 
     def select_target(self, target):
         current = self.windows.read(target)
         if self.dragging:
             self.cancel_drag()
-        self.dispatch(TargetSelected(current.reference), target_info=current)
+        self.dispatch(tb_es.TargetSelected(current.reference), target_info=current)
         if self.attachment is not None:
             self.attachment.target = current
         self.update()
 
     def current_position(self):
-        rect = self._last_presented or self.tracking.toolbar_rect(int(self.window.winId()))
+        rect = self._last_presented or self.tracking.toolbar_rect(self.hwnd)
         return self.tracking.screen_position(rect)
 
     def detach_toolbar(self):
         if self.state.attached:
-            self.dispatch(DetachClicked(self.current_position()))
+            self.dispatch(tb_es.DetachClicked(self.current_position()))
         self.update()
 
     def request_position(self):
-        if self.attachment is None:
-            self.notification.emit("연결된 대상 창이 없습니다.")
-        else:
+        if self._require_attachment():
             self.position_requested.emit(self.attachment.target)
 
     def toggle_lock(self):
-        if self.attachment is None:
-            self.notification.emit("연결된 대상 창이 없습니다.")
+        if not self._require_attachment():
             self.sync()
             return
         try:
@@ -138,8 +214,7 @@ class ToolbarController(QObject):
         self.changed.emit()
 
     def capture(self):
-        if self.attachment is None:
-            self.notification.emit("연결된 대상 창이 없습니다.")
+        if not self._require_attachment():
             return
         try:
             target = self.windows.read(self.attachment.target)
@@ -150,10 +225,12 @@ class ToolbarController(QObject):
 
     def sync(self):
         toolbar = self.window.toolbar
+        attached = self.state.attached
         toolbar.pin_button.blockSignals(True)
-        toolbar.pin_button.setChecked(self.state.attached)
+        toolbar.pin_button.setChecked(attached)
         toolbar.pin_button.blockSignals(False)
-        toolbar.pin_button.setToolTip("점착 중 · 클릭하여 떼기" if self.state.attached else "비점착 · 창 가장자리에 드롭하여 점착")
+        toolbar.pin_button.setToolTip(
+            "점착 중 · 클릭하여 떼기" if attached else "비점착 · 창 가장자리에 드롭하여 점착")
         toolbar.handle.setEnabled(True)
         toolbar.set_locked(self.attachment is not None and self.attachment.locked_rect is not None)
         toolbar.lock_button.setEnabled(self.state.connected)
@@ -161,103 +238,47 @@ class ToolbarController(QObject):
     def reveal(self):
         self.update()
 
+    # Kept as an alias: external callers may still use `controller.hide()`.
     hide = reveal
 
     def reset_position(self):
         # Reset layout preferences without changing connection or attachment.
-        self.dispatch(PlacementReset())
+        self.dispatch(tb_es.PlacementReset())
         self.update()
 
-    def start_drag(self):
-        if self.dragging or self._disposed:
-            return
-        try:
-            rect = self.tracking.toolbar_rect(int(self.window.winId()))
-            self._drag = DragSession(self.tracking.cursor(), rect, self.tracking.monitor(rect).scale)
-            self._drag_timer.start()
-            self.render()
-        except OSError as error:
-            self._end_gesture()
-            self.notification.emit(str(error))
-            self.render()
+    # ------------------------------------------------------ startup/recovery
 
-    def poll_drag(self):
-        if not self.dragging:
+    def initialize_startup(self):
+        """Initialize a fresh toolbar once; reopening the picker never resets it."""
+        if self._startup_initialized or self.state.connected:
+            self.reveal()
             return
+        position = self.tracking.startup_position(self.hwnd)
+        self.state = tb_s.ToolbarState(free_position=position)
+        self._startup_initialized = True
+        self._snapshot = None
+        self.sync()
+        self.render()
+        self._debug("TOOLBAR", f"Startup initialized mode=free connected=False "
+                               f"monitor={position.monitor_id} x_dip={position.x_dip} y_dip={position.y_dip}")
+
+    def recover_toolbar(self):
+        """Explicitly retrieve the toolbar without restoring or unlocking its target."""
         try:
-            if self.tracking.drag_cancelled():
+            if self.dragging:
                 self.cancel_drag()
-                return
-            session = self._drag
-            x, y = self.tracking.cursor()
-            dx, dy = x - session.cursor_start[0], y - session.cursor_start[1]
-            raw = replace(session.toolbar_start, x=session.toolbar_start.x + dx,
-                          y=session.toolbar_start.y + dy)
-            position = self.tracking.screen_position(raw)
-            if self.state.attached and self._snapshot is not None:
-                maximized = self._snapshot.maximized
-                placement = self.state.maximized_placement if maximized else self.state.normal_placement
-                placement = placement or AttachedPlacement(ToolbarEdge.RIGHT, 48)
-                target = self._snapshot.target.rect
-                scale = self.tracking.monitor(target).scale
-                horizontal = placement.edge in (ToolbarEdge.TOP, ToolbarEdge.BOTTOM)
-                offset = (raw.x - target.x if horizontal else raw.y - target.y) / scale
-                distance = (dy if horizontal else dx) / session.scale_start
-                self.dispatch(AttachedDragged(self.state.target, distance, position,
-                                             replace(placement, offset_dip=offset), maximized))
-            else:
-                self.dispatch(FreeMoved(position))
-            if not self.state.attached:
-                self.tracking.place_raw(int(self.window.winId()), raw)
-            candidate, info = (None, None)
-            if not self.state.attached and not self.tracking.snap_disabled():
-                candidate, info = self.tracking.nearest_candidate(raw)
-            if info is not None:
-                handle = self.window.show_candidate(info.rect)
-                self.tracking.place_candidate(handle, info.rect)
-            else:
-                self.window.show_candidate(None)
-            self.render()
-        except (OSError, ValueError) as error:
-            self._end_gesture()
-            self.notification.emit(str(error))
-            self.render()
-
-    def _end_gesture(self):
-        self._drag = None
-        self._drag_timer.stop()
-        self.window.toolbar.handle.cancel_drag()
-        self.window.show_candidate(None)
-
-    def finish_drag(self):
-        if not self.dragging:
-            return
-        try:
-            self.poll_drag()
-            if not self.dragging:
-                return
-            rect = self.tracking.toolbar_rect(int(self.window.winId()))
-            position = self.tracking.screen_position(rect)
-            disabled = self.tracking.snap_disabled()
-            candidate, info = (None, None)
-            if not self.state.attached and not disabled:
-                candidate, info = self.tracking.nearest_candidate(rect)
-                if info is not None:
-                    # Revalidate the candidate immediately before replacing a connection.
-                    info = self.windows.read(info)
-                    candidate = self.tracking.confirm_candidate(info, rect)
-            self.dispatch(ToolbarDropped(position, candidate, disabled), target_info=info)
+            if self.state.attached:
+                self.dispatch(tb_es.DetachClicked(self.current_position()))
+            position = self.tracking.recovery_position(self.hwnd)
+            self.dispatch(tb_es.FreeMoved(position))
+            self.update()
+            self._debug("TOOLBAR", f"Toolbar recovered monitor={position.monitor_id} "
+                                   f"x_dip={position.x_dip} y_dip={position.y_dip}")
+            self.notification.emit("툴바를 현재 화면 위쪽 중앙에 표시했습니다. 연결과 잠금은 유지합니다.")
         except (OSError, ValueError) as error:
             self.notification.emit(str(error))
-        finally:
-            self._end_gesture()
-            self.update()
 
-    def cancel_drag(self):
-        if self.dragging:
-            # Cancellation suppresses snap; already confirmed 48-DIP detach stays.
-            self._end_gesture()
-            self.update()
+    # ---------------------------------------------------- target observation
 
     def on_window_event(self, change):
         if (self._disposed or change.target != self.state.target
@@ -274,75 +295,109 @@ class ToolbarController(QObject):
             return
         if self.attachment is not None:
             reference = self.attachment.target.reference
-            if not self._watch_attempted or self._watcher.target != reference:
-                self._watch_attempted = True
-                try:
-                    self._watcher.watch(reference)
-                except OSError as error:
-                    self._watcher.target = reference
-                    self.notification.emit(f"창 상태 감지를 시작하지 못했습니다: {error}")
-            try:
-                snapshot = self.tracking.inspect(self.attachment.target)
-            except WindowClosedError:
-                previous = self.attachment.target.identity
-                self.dispatch(TargetClosed(reference, self.current_position()))
-                self.detach_requested.emit(previous)
-            except OSError as error:
-                if str(error) != self._inspection_error:
-                    self.notification.emit(f"창 정보를 확인하지 못했습니다. 연결을 유지합니다: {error}")
-                    self._inspection_error = str(error)
-                # During a gesture, a transient query failure must not drop topmost.
+            self._ensure_watching(reference)
+            if not self._refresh_snapshot(reference):
                 self.render()
                 return
-            else:
-                self._inspection_error = None
-                title_changed = self.attachment.target.title != snapshot.target.title
-                self.attachment.target = snapshot.target
-                self._snapshot = snapshot
-                self.dispatch(TargetStateObserved(snapshot))
-                if snapshot.visible:
-                    try:
-                        self.locks.enforce(self.attachment, snapshot.target)
-                    except (ValueError, OSError) as error:
-                        self.locks.release(self.attachment)
-                        self.notification.emit(f"Window Lock 해제: {error}")
-                        self.changed.emit()
-                if title_changed:
-                    self.window.setWindowTitle(f"GamaniJJom · {snapshot.target.title}")
-                    self.changed.emit()
         self.sync()
         self.render()
+
+    def _ensure_watching(self, reference):
+        if self._watch_attempted and self._watcher.target == reference:
+            return
+        self._watch_attempted = True
+        try:
+            self._watcher.watch(reference)
+        except OSError as error:
+            self._watcher.target = reference
+            self.notification.emit(f"창 상태 감지를 시작하지 못했습니다: {error}")
+
+    def _refresh_snapshot(self, reference):
+        """Inspect the target and apply the result. Returns False on a transient failure."""
+        try:
+            snapshot = self.tracking.inspect(self.attachment.target)
+        except WindowClosedError:
+            previous = self.attachment.target.identity
+            self.dispatch(tb_es.TargetClosed(reference, self.current_position()))
+            self.detach_requested.emit(previous)
+            return True
+        except OSError as error:
+            if self._inspection_errors.is_new(error):
+                self.notification.emit(f"창 정보를 확인하지 못했습니다. 연결을 유지합니다: {error}")
+            # During a gesture, a transient query failure must not drop topmost.
+            return False
+
+        self._inspection_errors.clear()
+        title_changed = self.attachment.target.title != snapshot.target.title
+        self.attachment.target = snapshot.target
+        self._snapshot = snapshot
+        self.dispatch(tb_es.TargetStateObserved(snapshot))
+        if snapshot.visible:
+            self._enforce_lock(snapshot)
+        if title_changed:
+            self.window.setWindowTitle(f"GamaniJJom · {snapshot.target.title}")
+            self.changed.emit()
+        return True
+
+    def _enforce_lock(self, snapshot):
+        try:
+            self.locks.enforce(self.attachment, snapshot.target)
+        except (ValueError, OSError) as error:
+            self.locks.release(self.attachment)
+            self.notification.emit(f"Window Lock 해제: {error}")
+            self.changed.emit()
+
+    # ------------------------------------------------------------- rendering
 
     def render(self):
         if self._disposed:
             return
         snapshot = self._snapshot
-        visible = (self.dragging or not self.state.attached
-                   or (snapshot is not None and snapshot.show_toolbar and not snapshot.fullscreen))
-        if not visible:
-            self.window.toolbar.menu.hide()
-            self.window.hide()
-            return
-        self.window.show()
+        if self._should_show(snapshot):
+            self._present(snapshot)
+        else:
+            self._hide(snapshot)
+
+    def _should_show(self, snapshot):
+        return (self.dragging or not self.state.attached
+                or (snapshot is not None and snapshot.show_toolbar and not snapshot.fullscreen))
+
+    def _hide(self, snapshot):
+        if self._presentation_visible is not False:
+            self._debug("TOOLBAR", f"Toolbar hidden mode={self.state.mode.value} "
+                                   f"minimized={snapshot.minimized if snapshot else None} "
+                                   f"fullscreen={snapshot.fullscreen if snapshot else None}")
+        self._presentation_visible = False
+        self.window.toolbar.menu.hide()
+        self.window.hide()
+
+    def _present(self, snapshot):
+        self.window.ensure_visible()
         try:
-            rect = self.tracking.render(int(self.window.winId()), self.state, snapshot,
-                                        dragging=self.dragging)
+            rect = self.tracking.render(self.hwnd, self.state, snapshot, dragging=self.dragging)
             self._last_presented = rect
+            if self._presentation_visible is not True:
+                self._debug("TOOLBAR", f"Toolbar shown hwnd={self.hwnd:#x} "
+                                       f"mode={self.state.mode.value} x={rect.x} y={rect.y} "
+                                       f"width={rect.width} height={rect.height}")
+            self._presentation_visible = True
             if not self.state.attached and self.state.free_position is None:
-                self.dispatch(FreeMoved(self.tracking.screen_position(rect)))
-            self._placement_error = None
+                self.dispatch(tb_es.FreeMoved(self.tracking.screen_position(rect)))
+            self._placement_errors.clear()
         except OSError as error:
-            if str(error) != self._placement_error:
+            if self._placement_errors.is_new(error):
+                self._debug("TOOLBAR", f"Toolbar placement failed: {error}")
                 self.notification.emit(f"툴바를 배치하지 못했습니다: {error}")
-                self._placement_error = str(error)
+
+    # -------------------------------------------------------------- teardown
 
     def dispose(self):
         self._disposed = True
         self._event_timer.stop()
-        self._end_gesture()
+        self.drag.end()
         self._watcher.close()
-        if self._watcher.error is not None and self.log is not None:
-            self.log.debug("WINDOW", f"Window event cleanup error: {self._watcher.error}")
+        if self._watcher.error is not None:
+            self._debug("WINDOW", f"Window event cleanup error: {self._watcher.error}")
         if self.attachment is not None:
             self.locks.release(self.attachment)
         self.window.dispose()
