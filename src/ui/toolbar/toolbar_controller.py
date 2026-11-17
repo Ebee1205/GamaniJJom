@@ -61,6 +61,7 @@ class ToolbarController(QObject):
         self._snapshot = None
         self._last_presented = None
         self._presentation_visible = None
+        self._order_limited = False
         self._startup_initialized = False
         self._disposed = False
         self._watch_attempted = False
@@ -137,6 +138,7 @@ class ToolbarController(QObject):
     # ------------------------------------------------------- policy dispatch
 
     def dispatch(self, event, *, target_info=None):
+        old_state = self.state
         transition = reduce_toolbar(self.state, event)
         old_target = self.state.target
         new_target = transition.state.target
@@ -148,7 +150,22 @@ class ToolbarController(QObject):
         if self.state.target != old_target:
             self._switch_target(target_info)
         self.sync()
+        if self.state.attached and (not old_state.attached or new_target != old_target):
+            self._bring_new_attachment_forward()
         return transition
+
+    def _bring_new_attachment_forward(self):
+        """Only an attachment confirmation requests foreground, never polling."""
+        if self.attachment is None:
+            return
+        try:
+            activated = self.tracking.bring_attached_pair(self.hwnd, self.attachment.target)
+            self._debug("TOOLBAR", f"Attachment foreground requested "
+                                   f"target={self.state.target.hwnd:#x} activated={activated}")
+        except OSError as error:
+            # Foreground failure must not undo a confirmed attachment or lock state.
+            self._debug("TOOLBAR", f"Attachment foreground failed: {error}")
+            self.notification.emit(f"대상 창을 앞으로 가져오지 못했습니다: {error}")
 
     @staticmethod
     def _validate_new_connection(new_target, target_info):
@@ -375,6 +392,11 @@ class ToolbarController(QObject):
         self.window.ensure_visible()
         try:
             rect = self.tracking.render(self.hwnd, self.state, snapshot, dragging=self.dragging)
+            limited = bool(self.tracking.relative_order_limited)
+            if limited and not self._order_limited:
+                self._debug("TOOLBAR", f"Relative Z-order restricted (WinError 5); "
+                                       f"normal window order retained target={self.state.target}")
+            self._order_limited = limited
             self._last_presented = rect
             if self._presentation_visible is not True:
                 self._debug("TOOLBAR", f"Toolbar shown hwnd={self.hwnd:#x} "

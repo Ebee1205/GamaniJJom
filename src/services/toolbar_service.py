@@ -20,6 +20,7 @@ class ToolbarService:
         self.windows = windows if windows is not None else WindowService()
         self._deadline = None
         self._mouse_was_down = True
+        self.relative_order_limited = False
 
     def inspect(self, target: WindowInfo, *, interaction_handles=()) -> WindowState:
         return self.windows.inspect(target, interaction_handles=interaction_handles)
@@ -135,9 +136,16 @@ class ToolbarService:
             x, y = clamp_position(x, y, toolbar, monitor.work_area)
         if (x, y) != (toolbar.x, toolbar.y):
             window_api.place_toolbar(handle, x, y)
-        window_api.set_toolbar_order(handle, topmost=toolbar_is_topmost(state, dragging=dragging),
-                                     target=state.target.hwnd if state.attached else None)
+        ordered = window_api.set_toolbar_order(
+            handle, topmost=toolbar_is_topmost(state, dragging=dragging),
+            target=state.target.hwnd if state.attached else None,
+        )
+        self.relative_order_limited = not ordered
         return WindowRect(x, y, toolbar.width, toolbar.height)
+
+    def bring_attached_pair(self, handle, target):
+        current = self.windows.read(target)
+        return window_api.bring_attached_pair(handle, current.hwnd)
 
     @staticmethod
     def placement(target: WindowRect, toolbar: WindowRect, area: WindowRect, offset):
