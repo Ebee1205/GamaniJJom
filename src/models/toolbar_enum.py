@@ -6,6 +6,12 @@ class ToolbarMode(str, Enum):
     ATTACHED = "attached"
 
 
+class ToolbarStatus(str, Enum):
+    DISCONNECTED = "disconnected"
+    CONNECTED_FREE = "connected_free"
+    ATTACHED = "attached"
+
+
 class ToolbarEdge(str, Enum):
     TOP = "top"
     RIGHT = "right"

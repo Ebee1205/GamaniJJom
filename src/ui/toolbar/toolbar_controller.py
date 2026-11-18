@@ -5,7 +5,6 @@ from src.adapters.windows.window_event_watcher import WindowEventWatcher
 import src.models.toolbar_event_schema as tb_es
 import src.models.toolbar_schema as tb_s
 from src.models.attachment import Attachment
-from src.models.toolbar_enum import ToolbarEdge
 from src.models.window_enum import WindowEvent
 from src.models.window_schema import WindowClosedError, WindowRect
 from src.services.toolbar_state_service import reduce_toolbar
@@ -88,7 +87,7 @@ class ToolbarController(QObject):
         toolbar = window.toolbar
         window.log = toolbar.log = toolbar.handle.log = self.log
 
-        toolbar.pin_button.clicked.connect(self.toggle_attachment)
+        toolbar.window_select_button.clicked.connect(self.begin_target_pick)
         if hasattr(toolbar, 'pick_requested'):
             toolbar.pick_requested.connect(self.begin_target_pick)
         toolbar.capture_options_requested.connect(
@@ -99,7 +98,6 @@ class ToolbarController(QObject):
             (toolbar.position_requested, self.request_position),
             (toolbar.settings_requested, self.settings_requested.emit),
             (toolbar.attach_requested, self.attach_requested.emit),
-            (toolbar.detach_requested, self.detach_toolbar),
             (toolbar.hide_requested, self.reveal),
             (toolbar.reset_requested, self.reset_position),
             (toolbar.quit_requested, self.quit_requested.emit),
@@ -220,7 +218,9 @@ class ToolbarController(QObject):
         current = self.windows.read(target)
         if self.dragging:
             self.cancel_drag()
-        self.dispatch(tb_es.TargetSelected(current.reference), target_info=current)
+        self.dispatch(tb_es.TargetSelected(
+            current.reference, self.current_position() if not self.state.attached else None),
+            target_info=current)
         if self.attachment is not None:
             self.attachment.target = current
         self.update()
@@ -228,31 +228,6 @@ class ToolbarController(QObject):
     def current_position(self):
         rect = self._last_presented or self.tracking.toolbar_rect(self.hwnd)
         return self.tracking.screen_position(rect)
-
-    def detach_toolbar(self):
-        if self.state.attached:
-            self.dispatch(tb_es.DetachClicked(self.current_position()))
-        self.update()
-
-    def toggle_attachment(self):
-        if self.state.attached:
-            self.detach_toolbar()
-            return
-        if self.attachment is None:
-            self.sync()
-            self.begin_target_pick()
-            return
-        try:
-            current = self.windows.read(self.attachment.target)
-            snapshot = self.tracking.inspect(current)
-            placement = (self.state.maximized_placement or tb_s.AttachedPlacement(ToolbarEdge.RIGHT, 48)
-                         if snapshot.maximized else self.state.normal_placement)
-            candidate = tb_es.SnapCandidate(current.reference, placement, 0, snapshot.maximized)
-            self.dispatch(tb_es.ToolbarDropped(self.current_position(), candidate), target_info=current)
-            self.update()
-        except OSError as error:
-            self.sync()
-            self.notification.emit(str(error))
 
     def begin_target_pick(self):
         from src.ui.toolbar.target_picker_widget import TargetPickerWidget
@@ -266,8 +241,13 @@ class ToolbarController(QObject):
 
     def _target_picked(self, target):
         try:
-            self.select_target(target)
-        except OSError as error:
+            current = self.windows.read(target)
+            snapshot = self.tracking.inspect(current)
+            candidate = self.tracking.pointed_candidate(
+                current, self.tracking.toolbar_rect(self.hwnd), maximized=snapshot.maximized)
+            self.dispatch(tb_es.TargetPicked(candidate), target_info=current)
+            self.update()
+        except (OSError, ValueError) as error:
             self.notification.emit(str(error))
 
     def switch_renderer(self, mode):
@@ -341,11 +321,16 @@ class ToolbarController(QObject):
     def sync(self):
         toolbar = self.window.toolbar
         attached = self.state.attached
-        toolbar.pin_button.blockSignals(True)
-        toolbar.pin_button.setChecked(attached)
-        toolbar.pin_button.blockSignals(False)
-        toolbar.pin_button.setToolTip(
-            "점착 중 · 클릭하여 떼기" if attached else "비점착 · 창 가장자리에 드롭하여 점착")
+        toolbar.window_select_button.setToolTip("창 선택/변경 · 가리킨 창에 연결하고 점착")
+        toolbar.window_select_button.setAccessibleName("창 선택/변경")
+        if (self.state.connected and not attached and self.state.free_position is not None
+                and self.state.free_anchor is None):
+            try:
+                anchor = self.tracking.free_anchor(self.state.free_position, self.attachment.target)
+                self.state = reduce_toolbar(self.state, tb_es.FreeAnchorSet(self.state.target, anchor)).state
+            except OSError as error:
+                if self._placement_errors.is_new(error):
+                    self.notification.emit(str(error))
         toolbar.handle.setEnabled(True)
         toolbar.set_locked(self.attachment is not None and self.attachment.locked_rect is not None)
         toolbar.lock_button.setEnabled(self.state.connected)

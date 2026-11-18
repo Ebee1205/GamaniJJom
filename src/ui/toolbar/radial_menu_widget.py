@@ -189,7 +189,7 @@ class RadialMenuWidget(QWidget):
         if self.selected is not None:
             tool = self.tools[self.selected]
             label = tool.label
-            if tool.id in ('pin', 'lock'):
+            if tool.id == 'lock':
                 label += ' (켜짐)' if self.toolbar.tool_checked(tool.id) else ' (꺼짐)'
             painter.setPen(theme_color('color-text-muted'))
             painter.drawText(QRectF(0, 186, 180, 22), Qt.AlignmentFlag.AlignCenter, label)

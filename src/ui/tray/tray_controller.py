@@ -133,7 +133,7 @@ class TrayController(QObject):
             lines.extend((
                 f"  controller=created visible={toolbar.window.isVisible()} "
                 f"dragging={toolbar.dragging} disposed={toolbar.disposed}",
-                f"  mode={state.mode.value} connected={state.connected} attached={state.attached}",
+                f"  status={state.status.value} mode={state.mode.value} connected={state.connected} attached={state.attached}",
                 f"  target={target_text} "
                 f"title={repr(target.title) if target else '—'}",
                 f"  lock={'locked' if attachment and attachment.locked_rect else 'unlocked'} "

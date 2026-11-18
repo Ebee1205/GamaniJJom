@@ -53,10 +53,18 @@ class ScreenPosition:
 
 
 @dataclass(frozen=True)
+class TargetRelativePosition:
+    """Free toolbar top-left relative to its target's top-left, in target DIP."""
+    x_dip: float
+    y_dip: float
+
+
+@dataclass(frozen=True)
 class ToolbarState:
     """One toolbar's connection and placement intent.
 
-    A free toolbar may still have a target. None free_position means that
+    Free + no target, free + target and attached + target are three statuses.
+    A connected free toolbar follows its target using free_anchor. None free_position means that
     startup placement has not been resolved yet. None maximized_placement
     requests the default inside-top-right placement avoiding caption buttons.
     Actual position, visibility, drag previews and lock data live elsewhere.
@@ -67,10 +75,13 @@ class ToolbarState:
     normal_placement: AttachedPlacement = field(default_factory=AttachedPlacement)
     maximized_placement: AttachedPlacement | None = None
     free_position: ScreenPosition | None = None
+    free_anchor: TargetRelativePosition | None = None
 
     def __post_init__(self) -> None:
         if self.mode == toolbar_enum.ToolbarMode.ATTACHED and self.target is None:
             raise ValueError("An attached toolbar requires a target window.")
+        if self.free_anchor is not None and (self.attached or self.target is None):
+            raise ValueError("A free anchor requires a connected, unattached toolbar.")
 
     @property
     def connected(self) -> bool:
@@ -79,3 +90,10 @@ class ToolbarState:
     @property
     def attached(self) -> bool:
         return self.mode == toolbar_enum.ToolbarMode.ATTACHED
+
+    @property
+    def status(self) -> toolbar_enum.ToolbarStatus:
+        if self.attached:
+            return toolbar_enum.ToolbarStatus.ATTACHED
+        return (toolbar_enum.ToolbarStatus.CONNECTED_FREE if self.connected
+                else toolbar_enum.ToolbarStatus.DISCONNECTED)

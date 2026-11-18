@@ -5,7 +5,9 @@ import time
 from src.adapters.windows import window_api
 from src.models.window_schema import WindowInfo, WindowRect, WindowState
 from src.services.window_service import WindowService
-from src.models.toolbar_schema import toolbar_is_topmost
+from src.models.toolbar_schema import toolbar_is_topmost, TargetRelativePosition, AttachedPlacement
+from src.models.toolbar_enum import ToolbarEdge
+from src.models.toolbar_event_schema import SnapCandidate
 from src.services.toolbar_layout_service import (
     attached_position, clamp_position, from_screen_position, snap_candidate, to_screen_position,
 )
@@ -40,6 +42,28 @@ class ToolbarService:
 
     def screen_position(self, rect):
         return to_screen_position(rect, self.monitor(rect))
+
+    def free_anchor(self, position, target):
+        monitors = window_api.available_monitors()
+        monitor = next((m for m in monitors if m.device == position.monitor_id), monitors[0])
+        x, y = from_screen_position(position, monitor)
+        scale = self.monitor(target.rect).scale
+        return TargetRelativePosition((x - target.rect.x) / scale, (y - target.rect.y) / scale)
+
+    def pointed_candidate(self, target, toolbar, *, maximized=False):
+        x, y = self.cursor()
+        rect = target.rect
+        scale = self.monitor(rect).scale
+        edge = min(((abs(y - rect.y), ToolbarEdge.TOP),
+                    (abs(x - rect.x - rect.width), ToolbarEdge.RIGHT),
+                    (abs(y - rect.y - rect.height), ToolbarEdge.BOTTOM),
+                    (abs(x - rect.x), ToolbarEdge.LEFT)), key=lambda item: item[0])[1]
+        horizontal = edge in (ToolbarEdge.TOP, ToolbarEdge.BOTTOM)
+        offset = ((x - rect.x - toolbar.width / 2) if horizontal
+                  else (y - rect.y - toolbar.height / 2)) / scale
+        length = ((rect.width - toolbar.width) if horizontal else (rect.height - toolbar.height)) / scale
+        return SnapCandidate(target.reference, AttachedPlacement(edge, max(0, min(offset, length))),
+                             0, maximized)
 
     def startup_position(self, handle, anchor_handle=None):
         """Place a free toolbar just above the picker's top-right corner.
@@ -140,6 +164,11 @@ class ToolbarService:
                     x += toolbar.width // 2
                 else:
                     x -= toolbar.width // 2
+        elif state.connected and state.free_anchor is not None and snapshot is not None:
+            monitor = self.monitor(snapshot.target.rect)
+            x = snapshot.target.rect.x + round(state.free_anchor.x_dip * monitor.scale)
+            y = snapshot.target.rect.y + round(state.free_anchor.y_dip * monitor.scale)
+            monitor = window_api.monitor_at(x + toolbar.width // 2, y + toolbar.height // 2)
         else:
             monitors = window_api.available_monitors()
             position = state.free_position

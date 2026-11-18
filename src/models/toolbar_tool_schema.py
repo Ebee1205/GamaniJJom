@@ -18,7 +18,7 @@ MORE_TOOLS = (
     ToolbarTool('window_size', 'window_size', '창 크기 설정'),
 )
 TOOLBAR_TOOLS = (
-    ToolbarTool('pin', 'pin', '점착 / 떼기', 'toggle'),
+    ToolbarTool('app_select', 'app_select', '창 선택/변경'),
     ToolbarTool('lock', 'lock', '대상 창 잠금', 'toggle'),
     ToolbarTool('more', 'more', '더보기', 'action'),
 )

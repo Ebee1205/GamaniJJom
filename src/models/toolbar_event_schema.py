@@ -7,13 +7,14 @@ monitor-relative DIP. Never pass minimized window coordinates as that position.
 from dataclasses import dataclass
 from math import isfinite
 
-from src.models.toolbar_schema import AttachedPlacement, ScreenPosition, ToolbarState
+from src.models.toolbar_schema import AttachedPlacement, ScreenPosition, ToolbarState, TargetRelativePosition
 from src.models.window_schema import WindowRef, WindowState
 
 
 @dataclass(frozen=True)
 class TargetSelected:
     target: WindowRef
+    position: ScreenPosition | None = None
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,18 @@ class SnapCandidate:
     def __post_init__(self) -> None:
         if not isfinite(self.distance_dip) or self.distance_dip < 0:
             raise ValueError("Snap distance must be finite and nonnegative.")
+
+
+@dataclass(frozen=True)
+class TargetPicked:
+    """An explicitly pointed window is connected and attached atomically."""
+    candidate: SnapCandidate
+
+
+@dataclass(frozen=True)
+class FreeAnchorSet:
+    target: WindowRef
+    anchor: TargetRelativePosition
 
 
 @dataclass(frozen=True)
@@ -84,7 +97,7 @@ class TargetStateObserved:
 
 
 ToolbarEvent = (
-    TargetSelected | ToolbarDropped | DetachClicked | AttachedDragged
+    TargetSelected | TargetPicked | FreeAnchorSet | ToolbarDropped | DetachClicked | AttachedDragged
     | FreeMoved | PlacementReset | TargetClosed | TargetStateObserved
 )
 

@@ -116,7 +116,6 @@ class CircleToolbarWidget(ToolbarWidget):
         self._pulse = QTimer(self)
         self._pulse.setInterval(16)
         self._pulse.timeout.connect(self._animate)
-        self.pin_button.toggled.connect(lambda _checked: self.update())
         self.lock_button.toggled.connect(lambda _checked: self.update())
         self.set_target(None)
 
@@ -167,16 +166,14 @@ class CircleToolbarWidget(ToolbarWidget):
             self.capture_button.click()
 
     def activate_tool(self, tool_id):
-        if tool_id == 'pin':
-            self.pin_button.click()
+        if tool_id == 'app_select':
+            self.window_select_button.click()
         elif tool_id == 'lock':
             self.lock_button.click()
         elif tool_id == 'more':
             self.show_more_menu()
         elif tool_id == 'settings':
             self.settings_requested.emit()
-        elif tool_id == 'app_select':
-            self.pick_requested.emit()
         elif tool_id == 'window_size':
             self.position_requested.emit()
 
@@ -186,8 +183,7 @@ class CircleToolbarWidget(ToolbarWidget):
         return True
 
     def tool_checked(self, tool_id):
-        return (self.pin_button.isChecked() if tool_id == 'pin'
-                else self.lock_button.isChecked() if tool_id == 'lock' else False)
+        return self.lock_button.isChecked() if tool_id == 'lock' else False
 
     def set_target(self, target, *, lost=False):
         self._title = target.title if target is not None else None
@@ -229,8 +225,6 @@ class CircleToolbarWidget(ToolbarWidget):
         painter.setOpacity(.4 if self._title is None and self._had_target else 1)
         icon('radial_camera').paint(painter, int(center.x() - 13), int(center.y() - 13), 26, 26)
         painter.setOpacity(1)
-        if self.pin_button.isChecked():
-            self._badge(painter, center + QPointF(18, -18), 'pin_filled')
         if locked:
             self._badge(painter, center + QPointF(18, 18), 'lock')
         if self._title is None:
