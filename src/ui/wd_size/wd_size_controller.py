@@ -1,5 +1,5 @@
 """Manage the unified program list and the existing geometry dialog."""
-from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtCore import QObject, QTimer, Qt, Signal
 
 from src.services.window_service import _validate_rect
 from src.ui.wd_size.wd_size_dialog import WdSizeDialog
@@ -39,6 +39,8 @@ class WdSizeController(QObject):
 
     @staticmethod
     def open(window):
+        if window.isMinimized():
+            window.setWindowState(window.windowState() & ~Qt.WindowState.WindowMinimized)
         window.show()
         window.raise_()
         window.activateWindow()
