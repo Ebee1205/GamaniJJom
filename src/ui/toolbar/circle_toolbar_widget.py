@@ -3,10 +3,10 @@ from math import hypot
 import time
 
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRectF, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QPainter, QPen
-from PySide6.QtWidgets import QWidget
+from PySide6.QtGui import QPainter, QPen
+from PySide6.QtWidgets import QApplication, QWidget
 
-from src.ui.resources import icon
+from src.ui.resources import icon, theme_color
 from src.ui.toolbar.radial_menu_widget import RadialMenuWidget
 from src.ui.toolbar.toolbar_widget import ToolbarWidget
 
@@ -101,6 +101,8 @@ class CircleToolbarWidget(ToolbarWidget):
         self.more_menu = self.menu
         self.more_menu.setParent(self)
         self.menu = RadialMenuWidget(self)
+        self._more_pending = False
+        QApplication.instance().focusWindowChanged.connect(self._focus_window_changed)
         self.setObjectName('circleToolbar')
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAutoFillBackground(False)
@@ -126,6 +128,25 @@ class CircleToolbarWidget(ToolbarWidget):
 
     def show_more_menu(self):
         self.menu.close_menu()
+        self._more_pending = True
+        # Windows can deliver the radial popup's focus loss after it is hidden.
+        QTimer.singleShot(0, self._open_more_menu)
+
+    def _focus_window_changed(self, window):
+        if self._more_pending and window is not self.menu.windowHandle():
+            QTimer.singleShot(0, self._open_more_menu)
+
+    def _open_more_menu(self):
+        if not self._more_pending:
+            return
+        if not self.isVisible() or self.menu.isVisible():
+            self._more_pending = False
+            return
+        ring_window = self.menu.windowHandle()
+        if (QApplication.platformName() == 'windows' and ring_window is not None
+                and QApplication.focusWindow() is ring_window):
+            return
+        self._more_pending = False
         self.more_menu.popup(self.mapToGlobal(self.rect().center()))
 
     def set_dock(self, edge):
@@ -201,8 +222,9 @@ class CircleToolbarWidget(ToolbarWidget):
     def paint_center(self, painter, center):
         rect = QRectF(center.x() - 30, center.y() - 30, 60, 60)
         locked = self.lock_button.isChecked()
-        painter.setBrush(QColor('#2e6655' if locked else '#3b4960' if self.handle.underMouse() else '#303949'))
-        painter.setPen(QPen(QColor('#498875' if locked else '#48556b'), 1))
+        fill = 'bg-tool-checked' if locked else 'bg-button-hover' if self.handle.underMouse() else 'bg-button'
+        painter.setBrush(theme_color(fill))
+        painter.setPen(QPen(theme_color('border-primary' if locked else 'border-button'), 1))
         painter.drawEllipse(rect)
         painter.setOpacity(.4 if self._title is None and self._had_target else 1)
         icon('radial_camera').paint(painter, int(center.x() - 13), int(center.y() - 13), 26, 26)
@@ -214,22 +236,22 @@ class CircleToolbarWidget(ToolbarWidget):
         if self._title is None:
             self._badge(painter, center + QPointF(-18, 18), text='!' if self._had_target else '?')
         if self._busy:
-            painter.setPen(QPen(QColor('#d3fff0'), 3))
+            painter.setPen(QPen(theme_color('color-capture-progress'), 3))
             painter.drawArc(rect.adjusted(3, 3, -3, -3), self._angle * 16, 110 * 16)
         if time.monotonic() < self._flash_until:
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor(240, 255, 250, 95))
+            painter.setBrush(theme_color('bg-capture-flash'))
             painter.drawEllipse(rect)
 
     @staticmethod
     def _badge(painter, center, icon_name=None, text=None):
-        painter.setPen(QPen(QColor('#8acbb8'), 1))
-        painter.setBrush(QColor('#29443e'))
+        painter.setPen(QPen(theme_color('border-toolbar-badge'), 1))
+        painter.setBrush(theme_color('bg-toolbar-badge'))
         painter.drawEllipse(center, 8, 8)
         if icon_name:
             icon(icon_name).paint(painter, int(center.x() - 5), int(center.y() - 5), 10, 10)
         else:
-            painter.setPen(QColor('#e4fff7'))
+            painter.setPen(theme_color('color-toolbar-badge'))
             painter.drawText(QRectF(center.x() - 8, center.y() - 8, 16, 16), Qt.AlignmentFlag.AlignCenter, text)
 
     def paintEvent(self, event):
@@ -243,12 +265,14 @@ class CircleToolbarWidget(ToolbarWidget):
         self.paint_center(painter, QPointF(30, 30))
 
     def hideEvent(self, event):
+        self._more_pending = False
         self.menu.hide()
         self.more_menu.hide()
         self.handle.cancel_drag()
         super().hideEvent(event)
 
     def dispose(self):
+        self._more_pending = False
         self._pulse.stop()
         self.more_menu.hide()
         self.menu.close_menu()

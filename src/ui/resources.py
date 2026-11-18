@@ -1,8 +1,9 @@
 """Resolve resources independently of the working directory."""
 from pathlib import Path
+from functools import lru_cache
 import re
 
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QColor, QIcon
 
 RESOURCE_ROOT = Path(__file__).resolve().parents[2] / "resource"
 _TOKEN_BLOCK = re.compile(r":root\s*\{([^{}]*)\}")
@@ -26,7 +27,43 @@ def load_theme(path: Path | None = None) -> str:
     Tokens use --name: value; and var(--name). Token values must be literals;
     nested variables and CSS fallback expressions are intentionally unsupported.
     """
-    theme_path = (path or RESOURCE_ROOT / "qss/theme.qss").resolve()
+    if path is None:
+        _default_theme.cache_clear()
+        return _default_theme()[0]
+    return _parse_theme(path.resolve())[0]
+
+
+@lru_cache(maxsize=1)
+def _default_theme() -> tuple[str, dict[str, str]]:
+    return _parse_theme((RESOURCE_ROOT / "qss" / "theme.qss").resolve())
+
+
+def theme_token(name: str) -> str:
+    tokens = _default_theme()[1]
+    if name not in tokens:
+        raise ValueError(f"Unknown theme token: --{name}")
+    return tokens[name]
+
+
+def theme_color(name: str) -> QColor:
+    value = theme_token(name)
+    rgba = re.fullmatch(
+        r"rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)",
+        value,
+    )
+    if rgba:
+        components = [int(component) for component in rgba.groups()]
+        if any(component > 255 for component in components):
+            raise ValueError(f"Invalid color for theme token --{name}: {value}")
+        color = QColor(components[0], components[1], components[2], components[3])
+    else:
+        color = QColor(value)
+    if not color.isValid():
+        raise ValueError(f"Invalid color for theme token --{name}: {value}")
+    return color
+
+
+def _parse_theme(theme_path: Path) -> tuple[str, dict[str, str]]:
     source = theme_path.read_text(encoding="utf-8")
     # Comments are documentation, not declarations or Qt selectors.
     source = re.sub(r"/\*.*?\*/", "", source, flags=re.DOTALL)
@@ -62,4 +99,4 @@ def load_theme(path: Path | None = None) -> str:
         lambda match: f'url("{(theme_path.parent / match.group(1)).resolve().as_posix()}")',
         stylesheet,
     )
-    return stylesheet
+    return stylesheet, tokens

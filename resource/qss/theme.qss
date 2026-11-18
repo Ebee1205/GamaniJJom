@@ -1,6 +1,7 @@
 /* Theme tokens are resolved by src/ui/resources.py before Qt loads this file.
    Use literal values in :root and var(--token-name) in component rules.
-   Qt QSS does not resolve CSS custom properties itself. */
+   Qt QSS does not resolve CSS custom properties itself. Python widgets can
+   access the same tokens with theme_token() or theme_color(). */
 :root {
     /* Text */
     --color-text: #e5e9f0;
@@ -31,6 +32,13 @@
     --bg-list-header: #29313e;
     --bg-menu: #242c37;
     --bg-menu-selected: #3a4b60;
+
+    /* Circle toolbar painting */
+    --color-capture-progress: #d3fff0;
+    --bg-capture-flash: rgba(240, 255, 250, 95);
+    --border-toolbar-badge: #8acbb8;
+    --bg-toolbar-badge: #29443e;
+    --color-toolbar-badge: #e4fff7;
 
     /* Borders and separators */
     --border-width: 1px;
@@ -174,6 +182,13 @@ QToolButton#toolbarButton { background: var(--bg-transparent); border: none; bor
 QToolButton#toolbarButton:hover { background: var(--bg-tool-hover); }
 QToolButton#toolbarButton:checked { background: var(--bg-tool-checked); }
 QToolButton#toolbarButton:pressed { background: var(--bg-tool-pressed); }
+
+/* TargetPickerWidget */
+QWidget#targetPicker {
+    background: var(--bg-menu);
+    color: var(--color-text);
+    border-radius: var(--radius-surface);
+}
 
 /* CmmDialogLayout: shared header, title and close button */
 QDialog#positionDialog, QDialog#commonDialog, QDialog#SettingDialog { background: var(--bg-transparent); }

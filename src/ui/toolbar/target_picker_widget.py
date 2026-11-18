@@ -2,7 +2,6 @@
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
-
 class TargetPickerWidget(QWidget):
     selected = Signal(object)
     notification = Signal(str)
@@ -16,7 +15,7 @@ class TargetPickerWidget(QWidget):
         self._cancel_pending = False
         self._ticks = 0
         self.setFixedSize(256, 48)
-        self.setStyleSheet('QWidget { background: #202833; color: #e3f2ed; border-radius: 8px; }')
+        self.setObjectName('targetPicker')
         label = QLabel('창을 가리킨 뒤 클릭하여 지정 · Esc 취소', self)
         label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         layout = QVBoxLayout(self)

@@ -3,11 +3,11 @@ from math import atan2, cos, hypot, radians, sin
 import time
 
 from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, QTimer
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
+from PySide6.QtGui import QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QWidget
 
 from src.models.toolbar_tool_schema import TOOLBAR_TOOLS
-from src.ui.resources import icon
+from src.ui.resources import icon, theme_color
 
 
 def layout_angles(dock=None, count=3):
@@ -158,8 +158,8 @@ class RadialMenuWidget(QWidget):
         step = (180 if dock else 360) / len(self.tools)
         for index, tool in enumerate(self.tools):
             direction = layout_angles(dock)[index]
-            gap = .03 * 180 / 3.141592653589793
-            start, sweep = 90 - direction + step / 2 - gap, -(step - gap * 2)
+            # No angular gap: neighbouring slices share an edge like cake slices.
+            start, sweep = 90 - direction + step / 2, -step
             path = QPainterPath()
             path.arcMoveTo(outer, start)
             path.arcTo(outer, start, sweep)
@@ -169,9 +169,10 @@ class RadialMenuWidget(QWidget):
             path.closeSubpath()
             active = self.toolbar.tool_checked(tool.id)
             hovered = index == self.selected
-            fill = ('#38795f' if hovered else '#2e6655') if active else ('#394353' if hovered else '#1e232b')
-            painter.setBrush(QColor(fill))
-            painter.setPen(QPen(QColor('#46505f'), 1))
+            fill = (('bg-primary-hover' if hovered else 'bg-tool-checked') if active
+                    else 'bg-tool-hover' if hovered else 'bg-surface')
+            painter.setBrush(theme_color(fill))
+            painter.setPen(QPen(theme_color('border-surface'), 1))
             painter.setOpacity(progress * (1 if self.toolbar.tool_enabled(tool.id) else .35))
             painter.drawPath(path)
             angle = radians(direction)
@@ -187,5 +188,8 @@ class RadialMenuWidget(QWidget):
         painter.restore()
         if self.selected is not None:
             tool = self.tools[self.selected]
-            painter.setPen(QColor('#a4b0c0'))
-            painter.drawText(QRectF(0, 186, 180, 22), Qt.AlignmentFlag.AlignCenter, tool.label)
+            label = tool.label
+            if tool.id in ('pin', 'lock'):
+                label += ' (켜짐)' if self.toolbar.tool_checked(tool.id) else ' (꺼짐)'
+            painter.setPen(theme_color('color-text-muted'))
+            painter.drawText(QRectF(0, 186, 180, 22), Qt.AlignmentFlag.AlignCenter, label)

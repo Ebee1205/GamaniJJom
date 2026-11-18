@@ -102,7 +102,8 @@ class ToolbarWidget(QFrame):
         for button in (self.pin_button, self.lock_button, self.capture_button, self.more_button):
             layout.addWidget(button)
         self.menu = QMenu(self)
-        self.menu.triggered.connect(lambda action: self.log.debug("TOOLBAR", f">> Menu action selected index={self.menu.actions().index(action)}") if self.log is not None else None)
+        menu = self.menu
+        menu.triggered.connect(lambda action: self.log.debug("TOOLBAR", f">> Menu action selected index={menu.actions().index(action)}") if self.log is not None else None)
         self.menu.aboutToHide.connect(lambda: self.log.debug("TOOLBAR", "<< More menu closed") if self.log is not None else None)
         for text, signal in (
             ("프로그램 목록…", self.attach_requested),
