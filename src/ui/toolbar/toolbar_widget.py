@@ -61,6 +61,8 @@ class DragHandle(QLabel):
 
 
 class ToolbarWidget(QFrame):
+    window_list_requested = Signal()
+    disconnect_requested = Signal()
     lock_requested = Signal()
     capture_requested = Signal()
     position_requested = Signal()
@@ -105,14 +107,11 @@ class ToolbarWidget(QFrame):
         menu.triggered.connect(lambda action: self.log.debug("TOOLBAR", f">> Menu action selected index={menu.actions().index(action)}") if self.log is not None else None)
         self.menu.aboutToHide.connect(lambda: self.log.debug("TOOLBAR", "<< More menu closed") if self.log is not None else None)
         for text, signal in (
-            ("프로그램 목록…", self.attach_requested),
-            ("설정…", self.settings_requested),
-            ("위치·크기 설정…", self.position_requested),
-            ("부착 위치 초기화", self.reset_requested),
+            ("위치 초기화", self.reset_requested),
+            ("설정", self.settings_requested),
+            ("종료", self.quit_requested),
         ):
             self.menu.addAction(text, signal.emit)
-        self.menu.addSeparator()
-        self.menu.addAction("종료", self.quit_requested.emit)
         self.more_button.clicked.connect(self.show_menu)
 
     def show_menu(self):

@@ -6,6 +6,7 @@ import src.models.toolbar_event_schema as tb_es
 import src.models.toolbar_schema as tb_s
 from src.models.attachment import Attachment
 from src.models.window_enum import WindowEvent
+from src.models.toolbar_enum import CaptureMode, ToolbarEdge
 from src.models.window_schema import WindowClosedError, WindowRect
 from src.services.toolbar_state_service import reduce_toolbar
 from src.ui.toolbar.toolbar_drag_gesture import ToolbarDragGesture
@@ -63,7 +64,9 @@ class ToolbarController(QObject):
         self._presentation_visible = None
         self._order_limited = False
         self._startup_initialized = False
+        self._capturing_primary_screen = False
         self._capturing = False
+        self._window_list_dialog = None
         self._picker = None
         self._target_was_lost = False
         self._disposed = False
@@ -87,12 +90,14 @@ class ToolbarController(QObject):
         toolbar = window.toolbar
         window.log = toolbar.log = toolbar.handle.log = self.log
 
-        toolbar.window_select_button.clicked.connect(self.begin_target_pick)
+        toolbar.window_select_button.clicked.connect(self.open_window_list)
         if hasattr(toolbar, 'pick_requested'):
             toolbar.pick_requested.connect(self.begin_target_pick)
         toolbar.capture_options_requested.connect(
             lambda: self.notification.emit("캡처 옵션은 준비 중입니다."))
         for signal, slot in (
+            (toolbar.window_list_requested, self.open_window_list),
+            (toolbar.disconnect_requested, self.disconnect_target),
             (toolbar.lock_requested, self.toggle_lock),
             (toolbar.capture_requested, self.capture),
             (toolbar.position_requested, self.request_position),
@@ -229,6 +234,61 @@ class ToolbarController(QObject):
         rect = self._last_presented or self.tracking.toolbar_rect(self.hwnd)
         return self.tracking.screen_position(rect)
 
+    def disconnect_target(self):
+        self.cancel_drag()
+        if self._picker is not None:
+            self._picker.stop()
+        self.window.toolbar.menu.hide()
+        if hasattr(self.window.toolbar, 'more_menu'):
+            self.window.toolbar.more_menu.hide()
+        self.dispatch(tb_es.TargetDisconnected(self.current_position()))
+        self._target_was_lost = False
+        self.update()
+        self._debug("TOOLBAR", "Disconnected; capture mode=primary_screen")
+
+    def open_window_list(self):
+        if self._disposed:
+            return
+        self.cancel_drag()
+        if self._picker is not None:
+            self._picker.stop()
+        self.window.toolbar.menu.hide()
+        if hasattr(self.window.toolbar, 'more_menu'):
+            self.window.toolbar.more_menu.hide()
+        if self._window_list_dialog is None:
+            from src.ui.toolbar.window_list_dialog import WindowListDialog
+            self._window_list_dialog = WindowListDialog(log=self.log)
+            self._window_list_dialog.refresh_requested.connect(self._refresh_window_list)
+            self._window_list_dialog.selection_requested.connect(self._confirm_window_list)
+        self._refresh_window_list()
+        self._window_list_dialog.show()
+        self._window_list_dialog.raise_()
+        self._window_list_dialog.activateWindow()
+        self._window_list_dialog.search.setFocus()
+        self._debug("TOOLBAR", "Window list dialog opened")
+
+    def _refresh_window_list(self):
+        try:
+            windows = self.windows.list_windows()
+            identity = self.attachment.target.identity if self.attachment is not None else None
+            self._window_list_dialog.set_windows(windows, identity)
+        except OSError as error:
+            self._window_list_dialog.set_error(str(error))
+
+    def _confirm_window_list(self, target):
+        try:
+            current = self.windows.read(target)
+            snapshot = self.tracking.inspect(current)
+            placement = (self.state.maximized_placement or tb_s.AttachedPlacement(ToolbarEdge.RIGHT, 48)
+                         if snapshot.maximized else self.state.normal_placement)
+            candidate = tb_es.SnapCandidate(current.reference, placement, 0, snapshot.maximized)
+            self.dispatch(tb_es.TargetPicked(candidate), target_info=current)
+        except (OSError, ValueError) as error:
+            self._window_list_dialog.set_error(str(error))
+            return
+        self._window_list_dialog.finish_selection()
+        self.update()
+
     def begin_target_pick(self):
         from src.ui.toolbar.target_picker_widget import TargetPickerWidget
         self._debug("PICKER", "Window selection requested")
@@ -262,6 +322,8 @@ class ToolbarController(QObject):
         if self._picker is not None:
             self._picker.stop()
         before = self.tracking.toolbar_rect(self.hwnd)
+        if self._window_list_dialog is not None:
+            self._window_list_dialog.reject()
         self.window.set_mode(mode)
         self._connect_toolbar_signals()
         self.sync()
@@ -291,11 +353,19 @@ class ToolbarController(QObject):
         self.changed.emit()
 
     def capture(self):
-        if self._capturing or not self._require_attachment():
+        if self._capturing:
             return
-        target = self.attachment.target
+        primary = self.state.capture_mode == CaptureMode.PRIMARY_SCREEN
+        if not primary and not self._require_attachment():
+            return
+        target = None if primary else self.attachment.target
+        self._capturing_primary_screen = primary
         self._capturing = True
         self._set_capture_busy(True)
+        if primary:
+            if hasattr(self.window.toolbar, 'more_menu'):
+                self.window.toolbar.more_menu.hide()
+            self.render()  # Exclude our floating controls from the monitor capture.
         # Give the shutter/progress frame time to paint before synchronous capture.
         QTimer.singleShot(35, lambda: self._complete_capture(target))
 
@@ -311,15 +381,22 @@ class ToolbarController(QObject):
             self._capturing = False
             return
         try:
-            target = self.windows.read(requested_target)
-            saved_path = self.capture_service.capture(target)
+            if requested_target is None:
+                saved_path = self.capture_service.capture_primary_screen()
+            else:
+                target = self.windows.read(requested_target)
+                saved_path = self.capture_service.capture(target)
             self.capture_completed.emit(f"캡처 저장 완료: {saved_path}")
         except (NotImplementedError, ValueError, OSError) as error:
             self.notification.emit(str(error))
         finally:
+            primary = self._capturing_primary_screen
+            self._capturing_primary_screen = False
             self._capturing = False
             if not self._disposed:
                 self._set_capture_busy(False)
+                if primary:
+                    self.update()
 
     def sync(self):
         toolbar = self.window.toolbar
@@ -347,7 +424,8 @@ class ToolbarController(QObject):
         self.tracking.radial = hasattr(toolbar, 'set_dock')
         if hasattr(toolbar, 'set_target'):
             toolbar.set_target(self.attachment.target if self.attachment is not None else None,
-                               lost=self._target_was_lost)
+                               lost=self._target_was_lost,
+                               primary_screen=self.state.capture_mode == CaptureMode.PRIMARY_SCREEN)
 
     def reveal(self):
         self.update()
@@ -473,6 +551,8 @@ class ToolbarController(QObject):
             self._hide(snapshot)
 
     def _should_show(self, snapshot):
+        if self._capturing_primary_screen:
+            return False
         return (self.dragging or not self.state.attached
                 or (snapshot is not None and snapshot.show_toolbar and not snapshot.fullscreen))
 
@@ -513,6 +593,9 @@ class ToolbarController(QObject):
     def dispose(self):
         if self._disposed:
             return
+        if self._window_list_dialog is not None:
+            self._window_list_dialog.reject()
+            self._window_list_dialog.deleteLater()
         if self._picker is not None:
             self._picker.stop()
             self._picker.deleteLater()

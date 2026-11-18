@@ -6,7 +6,7 @@ are executed here. Existing UI/Attachment lifecycle is migrated separately.
 """
 from dataclasses import replace
 
-from src.models.toolbar_enum import ToolbarMode
+from src.models.toolbar_enum import ToolbarMode, CaptureMode
 import src.models.toolbar_event_schema as toolbar_event_schema
 from src.models.toolbar_schema import AttachedPlacement, ToolbarState
 from src.models.window_schema import WindowRef
@@ -35,18 +35,25 @@ def reduce_toolbar(
     explicitly replaces the placement for the candidate's current window mode.
     Non-candidate layout, lock and position data are never inferred from HWNDs.
     """
+    if isinstance(event, toolbar_event_schema.TargetDisconnected):
+        return toolbar_event_schema.ToolbarTransition(
+            replace(state, mode=ToolbarMode.FREE, target=None, free_anchor=None,
+                    free_position=event.position, capture_mode=CaptureMode.PRIMARY_SCREEN),
+            _release_previous(state, None),
+        )
+
     if isinstance(event, toolbar_event_schema.TargetSelected):
         if event.target == state.target:
             return toolbar_event_schema.ToolbarTransition(state)
         return toolbar_event_schema.ToolbarTransition(
-            replace(state, target=event.target, free_anchor=None,
+            replace(state, target=event.target, free_anchor=None, capture_mode=CaptureMode.WINDOW,
                     free_position=event.position or state.free_position),
             _release_previous(state, event.target),
         )
 
     if isinstance(event, toolbar_event_schema.TargetPicked):
         candidate = event.candidate
-        attached = replace(state, mode=ToolbarMode.ATTACHED, target=candidate.target,
+        attached = replace(state, mode=ToolbarMode.ATTACHED, target=candidate.target, capture_mode=CaptureMode.WINDOW,
                            free_anchor=None)
         attached = (replace(attached, maximized_placement=candidate.placement)
                     if candidate.maximized else replace(attached, normal_placement=candidate.placement))
@@ -67,7 +74,7 @@ def reduce_toolbar(
             return toolbar_event_schema.ToolbarTransition(
                 replace(state, free_position=event.position, free_anchor=None)
             )
-        attached = replace(state, mode=ToolbarMode.ATTACHED, target=candidate.target, free_anchor=None)
+        attached = replace(state, mode=ToolbarMode.ATTACHED, target=candidate.target, capture_mode=CaptureMode.WINDOW, free_anchor=None)
         attached = (replace(attached, maximized_placement=candidate.placement)
                     if candidate.maximized
                     else replace(attached, normal_placement=candidate.placement))
@@ -117,7 +124,7 @@ def reduce_toolbar(
         position = (event.last_presented_position if state.attached or state.free_anchor is not None
                     else state.free_position or event.last_presented_position)
         return toolbar_event_schema.ToolbarTransition(
-            replace(state, mode=ToolbarMode.FREE, target=None, free_position=position, free_anchor=None),
+            replace(state, mode=ToolbarMode.FREE, target=None, free_position=position, free_anchor=None, capture_mode=CaptureMode.WINDOW),
             _release_previous(state, None),
         )
 

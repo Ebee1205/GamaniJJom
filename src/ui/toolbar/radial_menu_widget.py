@@ -1,4 +1,4 @@
-"""Radial Toolbar Prototype v0.4 geometry and mouse interaction."""
+"""A continuous right-button marking menu with radial child sectors."""
 from math import atan2, cos, hypot, radians, sin
 import time
 
@@ -36,16 +36,18 @@ class RadialMenuWidget(QWidget):
     DIAMETER = 180
 
     def __init__(self, toolbar):
-        super().__init__(None, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint
+        super().__init__(None, Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint
                          | Qt.WindowType.NoDropShadowWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.toolbar = toolbar
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setMouseTracking(True)
         self.setFixedSize(180, 212)
+        self._inset = 0
+        self.submenu_parent = None
+        self.child_selected = None
         self.tools = TOOLBAR_TOOLS
         self.selected = None
         self._right_tracking = False
-        self._pressed = None
         self._opened_at = 0.0
         self._origin = QPoint()
         self._animation = QTimer(self)
@@ -54,14 +56,17 @@ class RadialMenuWidget(QWidget):
 
     @property
     def center(self):
-        return QPointF(90, 90)
+        return QPointF(90 + self._inset, 90 + self._inset)
 
     def open_ring(self, global_center, *, right_tracking=False, press_position=None):
         if self.isVisible():
             self.close_menu()
             return
+        self._inset = 0
+        self.submenu_parent = self.child_selected = None
+        self.setFixedSize(180, 212)
         self.toolbar.more_menu.hide()
-        self.selected = self._pressed = None
+        self.selected = None
         self._right_tracking = right_tracking
         self._opened_at = time.monotonic()
         anchor = global_center.toPoint() if isinstance(global_center, QPointF) else global_center
@@ -71,8 +76,72 @@ class RadialMenuWidget(QWidget):
         self.show()
         self.setFocus(Qt.FocusReason.PopupFocusReason)
         self.grabMouse()
+        self.grabKeyboard()
         self._animation.start()
         self.update()
+
+    @property
+    def submenu_tools(self):
+        return self.tools[self.submenu_parent].children if self.submenu_parent is not None else ()
+
+    def _open_submenu(self, index):
+        if self.submenu_parent == index:
+            return
+        anchor = self.mapToGlobal(self.center.toPoint())
+        if not self._inset:
+            self._inset = 80
+            self.setFixedSize(340, 372)
+            self.move(anchor - QPoint(170, 170))
+        self.submenu_parent = self.selected = index
+        self.child_selected = None
+        if self.mouseGrabber() is not self:
+            self.grabMouse()
+        self.update()
+
+    def child_angles(self):
+        if not self.submenu_tools:
+            return []
+        direction = layout_angles(self.toolbar.dock)[self.submenu_parent]
+        count = len(self.submenu_tools)
+        return [(direction - 60 + (i + .5) * 120 / count) % 360 for i in range(count)]
+
+    def child_at(self, point):
+        if not self.submenu_tools:
+            return None
+        dx, dy = point.x() - self.center.x(), point.y() - self.center.y()
+        if hypot(dx, dy) < 96:
+            return None
+        angle = atan2(dx, -dy) * 180 / 3.141592653589793 % 360
+        half = 60 / len(self.submenu_tools)
+        for index, direction in enumerate(self.child_angles()):
+            if abs((angle - direction + 180) % 360 - 180) <= half:
+                return index
+        return None
+
+    def _track(self, global_point):
+        point = QPointF(self.mapFromGlobal(global_point.toPoint()))
+        distance = hypot(point.x() - self.center.x(), point.y() - self.center.y())
+        if distance < 34:
+            self.selected = self.submenu_parent = self.child_selected = None
+        elif distance <= 92 or self.submenu_parent is None:
+            index = self.index_at(point, outside=True)
+            self.selected = index
+            if index is not None and self.tools[index].children:
+                self._open_submenu(index)
+            else:
+                self.submenu_parent = self.child_selected = None
+        point = QPointF(self.mapFromGlobal(global_point.toPoint()))
+        self.child_selected = self.child_at(point)
+        self.update()
+
+    def _execute(self, tool):
+        if not self.toolbar.tool_enabled(tool.id):
+            self.close_menu()
+            return
+        if self.toolbar.log is not None:
+            self.toolbar.log.debug('TOOLBAR', f'Radial action selected id={tool.id}')
+        self.close_menu()
+        self.toolbar.activate_tool(tool.id)
 
     def close_menu(self):
         self._right_tracking = False
@@ -81,9 +150,12 @@ class RadialMenuWidget(QWidget):
     def hideEvent(self, event):
         self._animation.stop()
         self._right_tracking = False
-        self.selected = self._pressed = None
+        self.submenu_parent = self.child_selected = None
+        self.selected = None
         if self.mouseGrabber() is self:
             self.releaseMouse()
+        if self.keyboardGrabber() is self:
+            self.releaseKeyboard()
         self.toolbar.update()
         super().hideEvent(event)
 
@@ -94,47 +166,37 @@ class RadialMenuWidget(QWidget):
     def choose(self, index):
         if index is None or not 0 <= index < len(self.tools):
             self.close_menu()
-            return
-        tool = self.tools[index]
-        if not self.toolbar.tool_enabled(tool.id):
-            return
-        if self.toolbar.log is not None:
-            self.toolbar.log.debug("TOOLBAR", f"Radial action selected id={tool.id}")
-        self.close_menu()
-        self.toolbar.activate_tool(tool.id)
+        elif self.tools[index].children:
+            self._open_submenu(index)
+        else:
+            self._execute(self.tools[index])
 
     def mouseMoveEvent(self, event):
-        self.selected = self.index_at(event.position(), outside=self._right_tracking)
-        self.update()
+        if self._right_tracking:
+            self._track(event.globalPosition())
         event.accept()
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            index = self.index_at(event.position())
-            if index is None:
-                self.close_menu()
-            else:
-                self._pressed = index
-        elif event.button() == Qt.MouseButton.RightButton and not self._right_tracking:
-            self.close_menu()
+        # The marking menu has no second click-selection phase.
+        self.close_menu()
         event.accept()
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.RightButton and self._right_tracking:
-            self._right_tracking = False
-            delta = event.globalPosition() - QPointF(self._origin)
-            index = self.index_at(event.position(), outside=True)
-            if hypot(delta.x(), delta.y()) >= 5 and index is not None:
-                self.choose(index)  # A quick directional drag still selects its tool.
-            elif time.monotonic() - self._opened_at < .2:
-                self.update()  # A stationary short right-click keeps the ring open.
-            else:
+            self._track(event.globalPosition())
+            tool = (self.submenu_tools[self.child_selected]
+                    if self.submenu_tools and self.child_selected is not None
+                    else self.tools[self.selected]
+                    if self.selected is not None and (not self.tools[self.selected].children
+                         or self.tools[self.selected].kind == 'action'
+                         or self.tools[self.selected].kind == 'toggle')
+                    else None)
+            if tool is None:
                 self.close_menu()
-        elif event.button() == Qt.MouseButton.LeftButton:
-            index = self.index_at(event.position())
-            if self._pressed is not None and index == self._pressed:
-                self.choose(index)
-            self._pressed = None
+            else:
+                self._execute(tool)
+        else:
+            self.close_menu()
         event.accept()
 
     def keyPressEvent(self, event):
@@ -157,8 +219,8 @@ class RadialMenuWidget(QWidget):
         painter.scale(.45 + .55 * progress, .45 + .55 * progress)
         painter.translate(-center)
         painter.setOpacity(progress)
-        outer = QRectF(1, 1, 178, 178)
-        inner = QRectF(52, 52, 76, 76)
+        outer = QRectF(center.x() - 89, center.y() - 89, 178, 178)
+        inner = QRectF(center.x() - 38, center.y() - 38, 76, 76)
         dock = self.toolbar.dock
         step = (180 if dock else 360) / len(self.tools)
         for index, tool in enumerate(self.tools):
@@ -178,7 +240,7 @@ class RadialMenuWidget(QWidget):
                     else 'bg-tool-hover' if hovered else 'bg-surface')
             painter.setBrush(theme_color(fill))
             painter.setPen(QPen(theme_color('border-surface'), 1))
-            painter.setOpacity(progress * (1 if self.toolbar.tool_enabled(tool.id) else .35))
+            painter.setOpacity(progress * (1 if tool.children or self.toolbar.tool_enabled(tool.id) else .35))
             painter.drawPath(path)
             angle = radians(direction)
             point = QPointF(center.x() + 64 * sin(angle), center.y() - 64 * cos(angle))
@@ -186,15 +248,40 @@ class RadialMenuWidget(QWidget):
         painter.restore()
         painter.save()
         if dock:
-            clips = {'right': QRectF(90, 0, 90, 180), 'left': QRectF(0, 0, 90, 180),
-                     'top': QRectF(0, 0, 180, 90), 'bottom': QRectF(0, 90, 180, 90)}
+            clips = {'right': QRectF(center.x(), center.y() - 90, 90, 180),
+                     'left': QRectF(center.x() - 90, center.y() - 90, 90, 180),
+                     'top': QRectF(center.x() - 90, center.y() - 90, 180, 90),
+                     'bottom': QRectF(center.x() - 90, center.y(), 180, 90)}
             painter.setClipRect(clips[dock])
         self.toolbar.paint_center(painter, center)
         painter.restore()
-        if self.selected is not None:
-            tool = self.tools[self.selected]
-            label = tool.label
-            if tool.id == 'lock':
-                label += ' (켜짐)' if self.toolbar.tool_checked(tool.id) else ' (꺼짐)'
-            painter.setPen(theme_color('color-text-muted'))
-            painter.drawText(QRectF(0, 186, 180, 22), Qt.AlignmentFlag.AlignCenter, label)
+        for index, tool in enumerate(self.submenu_tools):
+            direction = self.child_angles()[index]
+            step = 120 / len(self.submenu_tools)
+            start, sweep = 90 - direction + step / 2 - 1, -(step - 2)
+            outer, inner = QRectF(center.x()-153, center.y()-153, 306, 306), QRectF(center.x()-96, center.y()-96, 192, 192)
+            path = QPainterPath()
+            path.arcMoveTo(outer, start)
+            path.arcTo(outer, start, sweep)
+            angle = radians(start + sweep)
+            path.lineTo(center.x()+96*cos(angle), center.y()-96*sin(angle))
+            path.arcTo(inner, start+sweep, -sweep)
+            path.closeSubpath()
+            hovered = index == self.child_selected
+            checked = self.toolbar.tool_checked(tool.id)
+            painter.setOpacity(1 if self.toolbar.tool_enabled(tool.id) else .35)
+            painter.setBrush(theme_color('bg-tool-hover' if hovered else 'bg-tool-checked' if checked else 'bg-surface'))
+            painter.setPen(QPen(theme_color('border-focus' if hovered else 'border-surface'), 1))
+            painter.drawPath(path)
+            angle = radians(direction)
+            point = center + QPointF(125*sin(angle), -125*cos(angle))
+            icon_name = 'unlock' if tool.id == 'lock' and not checked else tool.icon
+            icon(icon_name).paint(painter, round(point.x()-9), round(point.y()-20), 18, 18)
+            painter.setPen(theme_color('color-text'))
+            painter.drawText(QRectF(point.x()-36, point.y()+1, 72, 20), Qt.AlignmentFlag.AlignCenter, tool.label)
+        painter.setOpacity(1)
+        label = (self.submenu_tools[self.child_selected].label if self.child_selected is not None
+                 else self.tools[self.selected].label if self.selected is not None else '')
+        painter.setPen(theme_color('color-text-muted'))
+        painter.drawText(QRectF(center.x()-90, center.y()+(158 if self._inset else 96), 180, 22),
+                         Qt.AlignmentFlag.AlignCenter, label)

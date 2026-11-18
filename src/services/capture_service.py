@@ -33,10 +33,11 @@ class CaptureService:
     def save_path(self) -> Path:
         return self.saver.save_path
 
-    def capture(self, target: WindowInfo) -> Path:
+    def capture(self, target: WindowInfo | None) -> Path:
         """Save the selected window to the configured folder; return its PNG path."""
         try:
-            pixmap = self.grabber.grab(target.hwnd)
+            pixmap = (self.grabber.grab_primary_screen() if target is None
+                      else self.grabber.grab(target.hwnd))
             if self.scale != 1:
                 pixmap = pixmap.scaled(pixmap.width() * self.scale, pixmap.height() * self.scale,
                                        Qt.AspectRatioMode.IgnoreAspectRatio,
@@ -56,6 +57,9 @@ class CaptureService:
             )
             raise OSError(f"화면 캡처 실패: {error}") from error
 
+    def capture_primary_screen(self) -> Path:
+        return self.capture(None)
+
     # ------------------------------------------------------------------
     def _copy_to_clipboard(self, pixmap) -> None:
         """클립보드 복사는 부가 기능이므로 실패해도 캡처 자체는 성공으로 처리한다."""
@@ -67,8 +71,8 @@ class CaptureService:
             )
 
     @staticmethod
-    def _target_info(target: WindowInfo) -> str:
-        return f"hwnd={target.handle_text} pid={target.pid}"
+    def _target_info(target: WindowInfo | None) -> str:
+        return "screen=primary" if target is None else f"hwnd={target.handle_text} pid={target.pid}"
 
     def _debug(self, message: str) -> None:
         if self.log is not None:

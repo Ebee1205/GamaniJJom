@@ -35,12 +35,12 @@ class WindowHighlightOverlay(QWidget):
         if self.selection:
             # Low opacity keeps the hovered application's content readable.
             painter.setBrush(theme_color('bg-window-selection'))
-            painter.setPen(QPen(theme_color('border-window-selection'), 3))
+            painter.setPen(QPen(theme_color('border-window-highlight'), 3))
             painter.drawRoundedRect(rect, 5, 5)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.setPen(QPen(theme_color('border-window-selection-glow'), 6))
             painter.drawRoundedRect(rect.adjusted(3, 3, -3, -3), 4, 4)
         else:
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.setPen(QPen(theme_color('border-window-snap'), 3))
+            painter.setPen(QPen(theme_color('border-window-highlight'), 3))
             painter.drawRect(rect)

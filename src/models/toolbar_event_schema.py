@@ -49,6 +49,11 @@ class ToolbarDropped:
 
 
 @dataclass(frozen=True)
+class TargetDisconnected:
+    position: ScreenPosition
+
+
+@dataclass(frozen=True)
 class DetachClicked:
     position: ScreenPosition
 
@@ -97,7 +102,7 @@ class TargetStateObserved:
 
 
 ToolbarEvent = (
-    TargetSelected | TargetPicked | FreeAnchorSet | ToolbarDropped | DetachClicked | AttachedDragged
+    TargetSelected | TargetPicked | TargetDisconnected | FreeAnchorSet | ToolbarDropped | DetachClicked | AttachedDragged
     | FreeMoved | PlacementReset | TargetClosed | TargetStateObserved
 )
 

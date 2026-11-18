@@ -17,3 +17,7 @@ class ToolbarEdge(str, Enum):
     RIGHT = "right"
     BOTTOM = "bottom"
     LEFT = "left"
+
+class CaptureMode(str, Enum):
+    WINDOW = "window"
+    PRIMARY_SCREEN = "primary_screen"

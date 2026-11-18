@@ -4,13 +4,23 @@ import ctypes
 import win32con
 import win32gui
 import win32ui
-from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtGui import QGuiApplication, QImage, QPixmap
 
 PW_RENDERFULLCONTENT = 0x00000002  # Win8.1+ : DWM/GPU 렌더링 창도 캡처
 
 
 class WindowGrabber:
     """창 핸들(hwnd)을 받아 화면 이미지를 QPixmap으로 반환한다."""
+
+    @staticmethod
+    def grab_primary_screen() -> QPixmap:
+        screen = QGuiApplication.primaryScreen()
+        if screen is None:
+            raise OSError("주모니터를 찾을 수 없습니다.")
+        pixmap = screen.grabWindow(0)
+        if pixmap.isNull():
+            raise OSError("주모니터 화면을 캡처하지 못했습니다.")
+        return pixmap
 
     def grab(self, hwnd: int) -> QPixmap:
         self._restore_if_minimized(hwnd)

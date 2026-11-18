@@ -102,12 +102,13 @@ class CircleToolbarWidget(ToolbarWidget):
         self.more_menu.setParent(self)
         self.menu = RadialMenuWidget(self)
         self._more_pending = False
-        QApplication.instance().focusWindowChanged.connect(self._focus_window_changed)
+        QApplication.instance().focusWindowChanged.connect(self._more_focus_changed)
         self.setObjectName('circleToolbar')
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAutoFillBackground(False)
         self.setFixedSize(60, 60)
         self.dock = None
+        self._primary_screen = False
         self._title = None
         self._had_target = False
         self._busy = False
@@ -128,11 +129,11 @@ class CircleToolbarWidget(ToolbarWidget):
     def show_more_menu(self):
         self.menu.close_menu()
         self._more_pending = True
-        # Windows can deliver the radial popup's focus loss after it is hidden.
+        # Wait for focus changes from hidden windows before creating a popup.
         QTimer.singleShot(0, self._open_more_menu)
 
-    def _focus_window_changed(self, window):
-        if self._more_pending and window is not self.menu.windowHandle():
+    def _more_focus_changed(self, _window):
+        if self._more_pending:
             QTimer.singleShot(0, self._open_more_menu)
 
     def _open_more_menu(self):
@@ -141,9 +142,8 @@ class CircleToolbarWidget(ToolbarWidget):
         if not self.isVisible() or self.menu.isVisible():
             self._more_pending = False
             return
-        ring_window = self.menu.windowHandle()
-        if (QApplication.platformName() == 'windows' and ring_window is not None
-                and QApplication.focusWindow() is ring_window):
+        focus = QApplication.focusWindow()
+        if focus is not None and not focus.isVisible():
             return
         self._more_pending = False
         self.more_menu.popup(self.mapToGlobal(self.rect().center()))
@@ -160,18 +160,24 @@ class CircleToolbarWidget(ToolbarWidget):
     def capture_or_select(self):
         if self._busy:
             return
-        if self._title is None:
+        if self._title is None and not self._primary_screen:
             self.pick_requested.emit()
         else:
             self.capture_button.click()
 
     def activate_tool(self, tool_id):
         if tool_id == 'app_select':
-            self.window_select_button.click()
+            self.pick_requested.emit()
+        elif tool_id == 'window_list':
+            self.window_list_requested.emit()
+        elif tool_id == 'disconnect':
+            self.disconnect_requested.emit()
         elif tool_id == 'lock':
             self.lock_button.click()
         elif tool_id == 'more':
             self.show_more_menu()
+        elif tool_id == 'reset':
+            self.reset_requested.emit()
         elif tool_id == 'settings':
             self.settings_requested.emit()
         elif tool_id == 'window_size':
@@ -185,13 +191,16 @@ class CircleToolbarWidget(ToolbarWidget):
     def tool_checked(self, tool_id):
         return self.lock_button.isChecked() if tool_id == 'lock' else False
 
-    def set_target(self, target, *, lost=False):
+    def set_target(self, target, *, lost=False, primary_screen=False):
+        self._primary_screen = primary_screen
         self._title = target.title if target is not None else None
         self._had_target |= target is not None or lost
         self.lock_button.setEnabled(target is not None)
         text = (f'{self._title} · 클릭: 캡처' if self._title is not None
                 else '대상 창이 종료되었습니다 · 클릭하여 다시 지정' if self._had_target
                 else '클릭하여 캡처할 어플리케이션 지정')
+        if primary_screen:
+            text = '주모니터 전체 화면 캡처'
         self.handle.setToolTip(text + '\n드래그: 이동 · 우클릭: 도구')
         self.update()
 
@@ -223,11 +232,11 @@ class CircleToolbarWidget(ToolbarWidget):
         painter.setPen(QPen(theme_color('border-primary' if locked else 'border-button'), 1))
         painter.drawEllipse(rect)
         painter.setOpacity(.4 if self._title is None and self._had_target else 1)
-        icon('radial_camera').paint(painter, int(center.x() - 13), int(center.y() - 13), 26, 26)
+        icon('radial_monitor' if self._primary_screen else 'radial_camera').paint(painter, int(center.x() - 13), int(center.y() - 13), 26, 26)
         painter.setOpacity(1)
         if locked:
             self._badge(painter, center + QPointF(18, 18), 'lock')
-        if self._title is None:
+        if self._title is None and not self._primary_screen:
             self._badge(painter, center + QPointF(-18, 18), text='!' if self._had_target else '?')
         if self._busy:
             painter.setPen(QPen(theme_color('color-capture-progress'), 3))

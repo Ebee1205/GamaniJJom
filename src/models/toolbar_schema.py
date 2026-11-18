@@ -70,6 +70,7 @@ class ToolbarState:
     Actual position, visibility, drag previews and lock data live elsewhere.
     """
 
+    capture_mode: toolbar_enum.CaptureMode = toolbar_enum.CaptureMode.WINDOW
     mode: toolbar_enum.ToolbarMode = toolbar_enum.ToolbarMode.FREE
     target: WindowRef | None = None
     normal_placement: AttachedPlacement = field(default_factory=AttachedPlacement)
@@ -78,6 +79,8 @@ class ToolbarState:
     free_anchor: TargetRelativePosition | None = None
 
     def __post_init__(self) -> None:
+        if self.capture_mode == toolbar_enum.CaptureMode.PRIMARY_SCREEN and self.target is not None:
+            raise ValueError("Primary screen capture cannot have a connected target.")
         if self.mode == toolbar_enum.ToolbarMode.ATTACHED and self.target is None:
             raise ValueError("An attached toolbar requires a target window.")
         if self.free_anchor is not None and (self.attached or self.target is None):
