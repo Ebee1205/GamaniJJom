@@ -40,6 +40,12 @@
     --bg-toolbar-badge: #29443e;
     --color-toolbar-badge: #e4fff7;
 
+    /* Window selection preview (alpha values use the Qt 0..255 range) */
+    --border-window-selection: #3b82f6;
+    --border-window-selection-glow: rgba(59, 130, 246, 45);
+    --bg-window-selection: rgba(59, 130, 246, 14);
+    --border-window-snap: #75d8bf;
+
     /* Borders and separators */
     --border-width: 1px;
     --border-surface: #46505f;

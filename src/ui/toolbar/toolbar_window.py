@@ -1,9 +1,10 @@
 """Independent translucent window. All user actions belong to its component."""
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QRegion
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QWidget
 
 from src.ui.toolbar.toolbar_widget import ToolbarWidget
+from src.ui.toolbar.window_highlight_overlay import WindowHighlightOverlay
 from src.ui.toolbar.circle_toolbar_widget import CircleToolbarWidget
 
 
@@ -72,20 +73,14 @@ class ToolbarWindow(QWidget):
         else:
             self.show()
 
-    def show_candidate(self, rect):
+    def show_candidate(self, rect, *, selection=False):
         if rect is None:
             if self._candidate is not None:
                 self._candidate.hide()
             return
         if self._candidate is None:
-            flags = (Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint
-                     | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.WindowDoesNotAcceptFocus
-                     | Qt.WindowType.WindowTransparentForInput)
-            self._candidate = QFrame(None, flags)
-            self._candidate.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-            self._candidate.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
-            self._candidate.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-            self._candidate.setStyleSheet("QFrame { border: 3px solid #75d8bf; background: transparent; }")
+            self._candidate = WindowHighlightOverlay()
+        self._candidate.set_selection(selection)
         self._candidate.show()
         return int(self._candidate.winId())
 

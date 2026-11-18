@@ -231,7 +231,10 @@ class ToolbarController(QObject):
 
     def begin_target_pick(self):
         from src.ui.toolbar.target_picker_widget import TargetPickerWidget
+        self._debug("PICKER", "Window selection requested")
         self.window.toolbar.menu.hide()
+        if hasattr(self.window.toolbar, 'more_menu'):
+            self.window.toolbar.more_menu.hide()
         self.cancel_drag()
         if self._picker is None:
             self._picker = TargetPickerWidget(self.windows, self.tracking, self.window)

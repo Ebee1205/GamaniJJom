@@ -98,6 +98,8 @@ class RadialMenuWidget(QWidget):
         tool = self.tools[index]
         if not self.toolbar.tool_enabled(tool.id):
             return
+        if self.toolbar.log is not None:
+            self.toolbar.log.debug("TOOLBAR", f"Radial action selected id={tool.id}")
         self.close_menu()
         self.toolbar.activate_tool(tool.id)
 
@@ -120,11 +122,14 @@ class RadialMenuWidget(QWidget):
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.RightButton and self._right_tracking:
             self._right_tracking = False
-            # The HTML treats every release before 200ms as a short click.
-            if time.monotonic() - self._opened_at < .2:
-                self.update()
+            delta = event.globalPosition() - QPointF(self._origin)
+            index = self.index_at(event.position(), outside=True)
+            if hypot(delta.x(), delta.y()) >= 5 and index is not None:
+                self.choose(index)  # A quick directional drag still selects its tool.
+            elif time.monotonic() - self._opened_at < .2:
+                self.update()  # A stationary short right-click keeps the ring open.
             else:
-                self.choose(self.index_at(event.position(), outside=True))
+                self.close_menu()
         elif event.button() == Qt.MouseButton.LeftButton:
             index = self.index_at(event.position())
             if self._pressed is not None and index == self._pressed:

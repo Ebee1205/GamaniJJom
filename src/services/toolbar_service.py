@@ -104,6 +104,11 @@ class ToolbarService:
         return window_api.key_down(0x12)  # Alt; reevaluated at drop time.
 
     @staticmethod
+    def selection_input():
+        """Native input fallback when a popup handoff drops Qt focus/capture events."""
+        return window_api.key_down(0x02), window_api.key_down(0x1B)  # Right mouse, Esc.
+
+    @staticmethod
     def drag_cancelled():
         return window_api.key_down(0x1B)
 
