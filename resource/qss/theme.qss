@@ -120,7 +120,7 @@ QCheckBox::indicator:hover { border-color: var(--border-focus); }
 QCheckBox::indicator:checked {
     background: var(--bg-primary-hover);
     border-color: var(--border-focus);
-    image: url("../icons/check.svg");
+    image: url("../icons/icon_check.svg");
 }
 QComboBox {
     background: var(--bg-input);

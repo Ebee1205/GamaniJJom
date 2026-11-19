@@ -12,7 +12,7 @@ _TOKEN_REFERENCE = re.compile(r"var\(\s*--([a-z][a-z0-9-]*)\s*\)", re.ASCII)
 
 
 def icon(name: str) -> QIcon:
-    return QIcon(str(RESOURCE_ROOT / "icons" / f"{name}.svg"))
+    return QIcon(str(RESOURCE_ROOT / "icons" / f"icon_{name}.svg"))
 
 
 def apply_theme(app) -> None:

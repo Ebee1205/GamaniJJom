@@ -164,7 +164,7 @@ class ToolbarTheme(ABC):
         painter.setPen(QPen(theme_color('border-primary' if state.locked else 'border-button'), 1))
         painter.drawPath(self.cover_path(rect))
         painter.setOpacity(.4 if not state.has_target and state.had_target else 1)
-        icon('radial_monitor' if state.primary_screen else 'radial_camera').paint(
+        icon('monitor' if state.primary_screen else 'camera').paint(
             painter, int(center.x() - 13), int(center.y() - 13), 26, 26)
         painter.setOpacity(1)
         if state.locked:
@@ -218,7 +218,8 @@ class ToolbarTheme(ABC):
             painter.setOpacity(progress * (1 if tool.children or toolbar.tool_enabled(tool.id) else .35))
             painter.drawPath(layout.slot_path(index))
             anchor = layout.slot_anchor(index)
-            icon('radial_' + tool.id).paint(painter, int(anchor.x() - 11), int(anchor.y() - 11), 22, 22)
+            icon_name = 'lock_filled' if tool.id == 'lock' else tool.icon
+            icon(icon_name).paint(painter, int(anchor.x() - 11), int(anchor.y() - 11), 22, 22)
         painter.restore()
 
         self.paint_cover(painter, center, toolbar.cover_state())
