@@ -32,7 +32,7 @@ def slot_at(point, center, *, inner=34, outer=90, count=3, dock=None, previous=N
     return best
 
 
-class RadialMenuWidget(QWidget):
+class ToolBarInnerWidget(QWidget):
     DIAMETER = 180
 
     def __init__(self, toolbar):

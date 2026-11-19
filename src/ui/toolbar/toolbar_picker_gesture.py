@@ -3,17 +3,17 @@ from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
-class TargetPickerWidget(QWidget):
+class ToolbarPickerGesture(QWidget):
     selected = Signal(object)
     notification = Signal(str)
 
-    def __init__(self, windows, tracking, toolbar_window):
+    def __init__(self, windows, tracking, toolbar_widget):
         # A picker is a modal interaction, not a popup menu. Windows can close
         # a new Qt.Popup when the previous radial popup finishes deactivating.
         super().__init__(None, Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint
                          | Qt.WindowType.WindowStaysOnTopHint)
-        self.windows, self.tracking, self.toolbar_window = windows, tracking, toolbar_window
-        self.log = getattr(toolbar_window, "log", None)
+        self.windows, self.tracking, self.toolbar_widget = windows, tracking, toolbar_widget
+        self.log = getattr(toolbar_widget, "log", None)
         self._active = False
         self._candidate = None
         self._pressed = None
@@ -79,7 +79,7 @@ class TargetPickerWidget(QWidget):
         self._pressed = None
         self._right_previous = False
         self._right_armed = False
-        self.toolbar_window.show_candidate(None)
+        self.toolbar_widget.show_candidate(None)
         if self.mouseGrabber() is self:
             self.releaseMouse()
         self.releaseKeyboard()
@@ -94,7 +94,7 @@ class TargetPickerWidget(QWidget):
             return
         try:
             self._candidate = self.windows.window_at_pointer(
-                ignored_handles=(int(self.winId()), self.toolbar_window.candidate_handle),
+                ignored_handles=(int(self.winId()), self.toolbar_widget.candidate_handle),
             )
             cursor_x, cursor_y = self.tracking.cursor()
             # Native coordinates stay in the service layer.
@@ -106,9 +106,9 @@ class TargetPickerWidget(QWidget):
                             f"title={info.title if info else None!r}")
                 self._hover_identity = identity
             if info is None:
-                self.toolbar_window.show_candidate(None)
+                self.toolbar_widget.show_candidate(None)
             else:
-                handle = self.toolbar_window.show_candidate(info.rect, selection=True)
+                handle = self.toolbar_widget.show_candidate(info.rect, selection=True)
                 self.tracking.place_candidate(handle, info.rect)
         except OSError as error:
             self.stop("error")

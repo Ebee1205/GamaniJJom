@@ -66,7 +66,7 @@ class ToolbarController(QObject):
         self._startup_initialized = False
         self._capturing_primary_screen = False
         self._capturing = False
-        self._window_list_dialog = None
+        self._wd_list_dialog = None
         self._picker = None
         self._target_was_lost = False
         self._disposed = False
@@ -255,25 +255,25 @@ class ToolbarController(QObject):
         self.window.toolbar.menu.hide()
         if hasattr(self.window.toolbar, 'more_menu'):
             self.window.toolbar.more_menu.hide()
-        if self._window_list_dialog is None:
-            from src.ui.toolbar.window_list_dialog import WindowListDialog
-            self._window_list_dialog = WindowListDialog(log=self.log)
-            self._window_list_dialog.refresh_requested.connect(self._refresh_window_list)
-            self._window_list_dialog.selection_requested.connect(self._confirm_window_list)
+        if self._wd_list_dialog is None:
+            from ui.wd_list.wd_list_dialog import WdListDialog
+            self._wd_list_dialog = WdListDialog(log=self.log)
+            self._wd_list_dialog.refresh_requested.connect(self._refresh_window_list)
+            self._wd_list_dialog.selection_requested.connect(self._confirm_window_list)
         self._refresh_window_list()
-        self._window_list_dialog.show()
-        self._window_list_dialog.raise_()
-        self._window_list_dialog.activateWindow()
-        self._window_list_dialog.search.setFocus()
+        self._wd_list_dialog.show()
+        self._wd_list_dialog.raise_()
+        self._wd_list_dialog.activateWindow()
+        self._wd_list_dialog.search.setFocus()
         self._debug("TOOLBAR", "Window list dialog opened")
 
     def _refresh_window_list(self):
         try:
             windows = self.windows.list_windows()
             identity = self.attachment.target.identity if self.attachment is not None else None
-            self._window_list_dialog.set_windows(windows, identity)
+            self._wd_list_dialog.set_windows(windows, identity)
         except OSError as error:
-            self._window_list_dialog.set_error(str(error))
+            self._wd_list_dialog.set_error(str(error))
 
     def _confirm_window_list(self, target):
         try:
@@ -284,20 +284,20 @@ class ToolbarController(QObject):
             candidate = tb_es.SnapCandidate(current.reference, placement, 0, snapshot.maximized)
             self.dispatch(tb_es.TargetPicked(candidate), target_info=current)
         except (OSError, ValueError) as error:
-            self._window_list_dialog.set_error(str(error))
+            self._wd_list_dialog.set_error(str(error))
             return
-        self._window_list_dialog.finish_selection()
+        self._wd_list_dialog.finish_selection()
         self.update()
 
     def begin_target_pick(self):
-        from src.ui.toolbar.target_picker_widget import TargetPickerWidget
+        from ui.toolbar.toolbar_picker_gesture import ToolbarPickerGesture
         self._debug("PICKER", "Window selection requested")
         self.window.toolbar.menu.hide()
         if hasattr(self.window.toolbar, 'more_menu'):
             self.window.toolbar.more_menu.hide()
         self.cancel_drag()
         if self._picker is None:
-            self._picker = TargetPickerWidget(self.windows, self.tracking, self.window)
+            self._picker = ToolbarPickerGesture(self.windows, self.tracking, self.window)
             self._picker.selected.connect(self._target_picked)
             self._picker.notification.connect(self.notification.emit)
         self._picker.start()
@@ -322,8 +322,8 @@ class ToolbarController(QObject):
         if self._picker is not None:
             self._picker.stop()
         before = self.tracking.toolbar_rect(self.hwnd)
-        if self._window_list_dialog is not None:
-            self._window_list_dialog.reject()
+        if self._wd_list_dialog is not None:
+            self._wd_list_dialog.reject()
         self.window.set_mode(mode)
         self._connect_toolbar_signals()
         self.sync()
@@ -593,9 +593,9 @@ class ToolbarController(QObject):
     def dispose(self):
         if self._disposed:
             return
-        if self._window_list_dialog is not None:
-            self._window_list_dialog.reject()
-            self._window_list_dialog.deleteLater()
+        if self._wd_list_dialog is not None:
+            self._wd_list_dialog.reject()
+            self._wd_list_dialog.deleteLater()
         if self._picker is not None:
             self._picker.stop()
             self._picker.deleteLater()

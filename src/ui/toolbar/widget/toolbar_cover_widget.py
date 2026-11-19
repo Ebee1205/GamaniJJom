@@ -7,8 +7,8 @@ from PySide6.QtGui import QPainter, QPen
 from PySide6.QtWidgets import QApplication, QWidget
 
 from src.ui.resources import icon, theme_color
-from src.ui.toolbar.radial_menu_widget import RadialMenuWidget
-from src.ui.toolbar.toolbar_widget import ToolbarWidget
+from src.ui.toolbar.widget.toolbar_inner_widget import ToolBarInnerWidget
+from src.ui.toolbar.widget.toolbar_base_widget import ToolbarBaseWidget
 
 
 class CircleDragSurface(QWidget):
@@ -76,8 +76,8 @@ class CircleDragSurface(QWidget):
         return super().event(event)
 
 
-class CircleToolbarWidget(ToolbarWidget):
-    """Same signal/button contract as ToolbarWidget, rendered as a circle.
+class ToolBarCoverWidget(ToolbarBaseWidget):
+    """Same signal/button contract as ToolbarBaseWidget, rendered as a circle.
 
     Inherited hidden buttons are action/state objects. Both renderers therefore
     use the same controller and services without creating another toolbar.
@@ -100,7 +100,7 @@ class CircleToolbarWidget(ToolbarWidget):
         self.handle.drag_cancelled.connect(self.drag_cancelled.emit)
         self.more_menu = self.menu
         self.more_menu.setParent(self)
-        self.menu = RadialMenuWidget(self)
+        self.menu = ToolBarInnerWidget(self)
         self._more_pending = False
         QApplication.instance().focusWindowChanged.connect(self._more_focus_changed)
         self.setObjectName('circleToolbar')

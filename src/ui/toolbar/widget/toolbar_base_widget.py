@@ -60,7 +60,7 @@ class DragHandle(QLabel):
         return super().event(event)
 
 
-class ToolbarWidget(QFrame):
+class ToolbarBaseWidget(QFrame):
     window_list_requested = Signal()
     disconnect_requested = Signal()
     lock_requested = Signal()

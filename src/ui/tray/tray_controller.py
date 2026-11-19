@@ -9,7 +9,7 @@ from src.models.toolbar_event_schema import TargetClosed
 from src.ui.tray.tray_widget import TrayWidget
 from src.ui.wd_size.wd_size_controller import WdSizeController
 from src.ui.toolbar.toolbar_controller import ToolbarController
-from src.ui.toolbar.toolbar_window import ToolbarWindow
+from src.ui.toolbar.widget.toolbar_widget import ToolbarWidget
 from src.ui.cmm.cmm_dialog import CmmDialog
 from src.ui.settings.setting_dialog import SettingDialog
 from src.ui.settings.settings_controller import SettingsController
@@ -176,7 +176,7 @@ class TrayController(QObject):
 
     def ensure_toolbar(self):
         if self.toolbar_controller is None:
-            window = ToolbarWindow()
+            window = ToolbarWidget()
             controller = ToolbarController(window, None, self.locks, self.capture,
                                            self.tracking, self.windows, self)
             controller.notification.connect(self.notify)

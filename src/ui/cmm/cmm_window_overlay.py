@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QWidget
 from src.ui.resources import theme_color
 
 
-class WindowHighlightOverlay(QWidget):
+class CmmWindowOverlay(QWidget):
     def __init__(self):
         flags = (Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint
                  | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.WindowDoesNotAcceptFocus

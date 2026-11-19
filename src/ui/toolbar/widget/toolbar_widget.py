@@ -3,12 +3,12 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QRegion
 from PySide6.QtWidgets import QHBoxLayout, QWidget
 
-from src.ui.toolbar.toolbar_widget import ToolbarWidget
-from src.ui.toolbar.window_highlight_overlay import WindowHighlightOverlay
-from src.ui.toolbar.circle_toolbar_widget import CircleToolbarWidget
+from ui.toolbar.widget.toolbar_base_widget import ToolbarBaseWidget
+from ui.cmm.cmm_window_overlay import CmmWindowOverlay
+from ui.toolbar.widget.toolbar_cover_widget import ToolBarCoverWidget
 
 
-class ToolbarWindow(QWidget):
+class ToolbarWidget(QWidget):
     def __init__(self, title: str = "", parent=None, *, mode='circle'):
         if mode not in ('circle', 'bar'):
             raise ValueError('Unknown toolbar renderer')
@@ -22,7 +22,7 @@ class ToolbarWindow(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setWindowTitle(f"GamaniJJom — {title}")
         self.mode = mode
-        self.toolbar = CircleToolbarWidget(self) if mode == 'circle' else ToolbarWidget(self)
+        self.toolbar = ToolBarCoverWidget(self) if mode == 'circle' else ToolbarBaseWidget(self)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.toolbar)
@@ -57,7 +57,7 @@ class ToolbarWindow(QWidget):
         old.hide()
         old.deleteLater()
         self.mode = mode
-        self.toolbar = CircleToolbarWidget(self) if mode == 'circle' else ToolbarWidget(self)
+        self.toolbar = ToolBarCoverWidget(self) if mode == 'circle' else ToolbarBaseWidget(self)
         self.layout().addWidget(self.toolbar)
         self.toolbar.ensurePolished()
         self.toolbar.show()
@@ -79,7 +79,7 @@ class ToolbarWindow(QWidget):
                 self._candidate.hide()
             return
         if self._candidate is None:
-            self._candidate = WindowHighlightOverlay()
+            self._candidate = CmmWindowOverlay()
         self._candidate.set_selection(selection)
         self._candidate.show()
         return int(self._candidate.winId())

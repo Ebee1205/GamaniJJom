@@ -6,7 +6,7 @@ from src.ui.cmm.cmm_dialog_layout import CmmDialogLayout
 from src.ui.cmm.cmm_window_list import CmmWindowList
 
 
-class WindowListDialog(QDialog):
+class WdListDialog(QDialog):
     refresh_requested = Signal()
     selection_requested = Signal(object)
 
@@ -14,7 +14,7 @@ class WindowListDialog(QDialog):
         flags = Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
         super().__init__(parent, flags)
         self.log = log
-        self.setObjectName('windowListDialog')
+        self.setObjectName('WdListDialog')
         self.setWindowTitle('GamaniJJom - 창 목록')
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setWindowModality(Qt.WindowModality.ApplicationModal)

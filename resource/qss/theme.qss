@@ -181,14 +181,14 @@ QFrame#toolbarSurface, QFrame#dialogSurface {
     border-radius: var(--radius-surface);
 }
 
-/* ToolbarWidget / CmmButton / DragHandle */
+/* ToolbarBaseWidget / CmmButton / DragHandle */
 QLabel#dragHandle { color: var(--color-text-subtle); font-size: var(--font-size-drag-handle); }
 QToolButton#toolbarButton { background: var(--bg-transparent); border: none; border-radius: var(--radius-tool); }
 QToolButton#toolbarButton:hover { background: var(--bg-tool-hover); }
 QToolButton#toolbarButton:checked { background: var(--bg-tool-checked); }
 QToolButton#toolbarButton:pressed { background: var(--bg-tool-pressed); }
 
-/* TargetPickerWidget */
+/* ToolbarPickerGesture */
 QWidget#targetPicker {
     background: var(--bg-menu);
     color: var(--color-text);
