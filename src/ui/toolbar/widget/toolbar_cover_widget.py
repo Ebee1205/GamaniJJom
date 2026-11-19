@@ -25,6 +25,7 @@ class ToolbarCoverWidget(QWidget):
     disconnect_requested = Signal()
     lock_requested = Signal()
     capture_requested = Signal()
+    region_capture_requested = Signal()
     position_requested = Signal()
     capture_options_requested = Signal()
     settings_requested = Signal()
@@ -56,6 +57,7 @@ class ToolbarCoverWidget(QWidget):
         self._press = None
         self._moving = False
         self._primary_screen = False
+        self._region_active = False
         self._title = None
         self._had_target = False
         self._busy = False
@@ -116,8 +118,8 @@ class ToolbarCoverWidget(QWidget):
     def cover_state(self):
         return CoverState(
             dock=self.dock, locked=self.lock_button.isChecked(), hovered=self.underMouse(),
-            has_target=self._title is not None, had_target=self._had_target,
-            primary_screen=self._primary_screen, busy=self._busy, spin_angle=self._angle,
+            has_target=self._title is not None or self._region_active, had_target=self._had_target,
+            primary_screen=self._primary_screen and not self._region_active, busy=self._busy, spin_angle=self._angle,
             flashing=time.monotonic() < self._flash_until)
 
     def paintEvent(self, event):
@@ -243,7 +245,7 @@ class ToolbarCoverWidget(QWidget):
     def capture_or_select(self):
         if self._busy:
             return
-        if self._title is None and not self._primary_screen:
+        if self._title is None and not self._primary_screen and not self._region_active:
             self.pick_requested.emit()
         else:
             self.capture_button.click()
@@ -265,6 +267,8 @@ class ToolbarCoverWidget(QWidget):
             self.settings_requested.emit()
         elif tool_id == 'window_size':
             self.position_requested.emit()
+        elif tool_id == 'region_capture':
+            self.region_capture_requested.emit()
 
     def tool_enabled(self, tool_id):
         if tool_id in ('lock', 'window_size'):
@@ -275,8 +279,9 @@ class ToolbarCoverWidget(QWidget):
         return self.lock_button.isChecked() if tool_id == 'lock' else False
 
     # ---- State pushed by the controller ----------------------------------------------
-    def set_target(self, target, *, lost=False, primary_screen=False):
+    def set_target(self, target, *, lost=False, primary_screen=False, region_active=False):
         self._primary_screen = primary_screen
+        self._region_active = region_active
         self._title = target.title if target is not None else None
         self._had_target |= target is not None or lost
         self.lock_button.setEnabled(target is not None)
@@ -285,6 +290,8 @@ class ToolbarCoverWidget(QWidget):
                 else '클릭하여 캡처할 어플리케이션 지정')
         if primary_screen:
             text = '주모니터 전체 화면 캡처'
+        if region_active:
+            text = '선택 영역 캡처'
         self.setToolTip(text + '\n드래그: 이동 · 우클릭: 도구')
         self.update()
 

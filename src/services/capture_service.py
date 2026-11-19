@@ -4,7 +4,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 
 from src.adapters.windows.window_grabber import WindowGrabber
-from src.models.window_schema import WindowInfo
+from src.models.window_schema import WindowInfo, WindowRect
 from src.services.image_save_service import ImageSaveService
 
 
@@ -35,9 +35,16 @@ class CaptureService:
 
     def capture(self, target: WindowInfo | None) -> Path:
         """Save the selected window to the configured folder; return its PNG path."""
+        grab = (self.grabber.grab_primary_screen if target is None
+                else lambda: self.grabber.grab(target.hwnd))
+        return self._capture(grab, self._target_info(target))
+
+    def capture_region(self, rect: WindowRect) -> Path:
+        return self._capture(lambda: self.grabber.grab_region(rect), f"region={rect}")
+
+    def _capture(self, grab, source: str) -> Path:
         try:
-            pixmap = (self.grabber.grab_primary_screen() if target is None
-                      else self.grabber.grab(target.hwnd))
+            pixmap = grab()
             if self.scale != 1:
                 pixmap = pixmap.scaled(pixmap.width() * self.scale, pixmap.height() * self.scale,
                                        Qt.AspectRatioMode.IgnoreAspectRatio,
@@ -45,14 +52,14 @@ class CaptureService:
             output_path = self.saver.save_png(pixmap)
             self._debug(
                 f"++ Capture saved path={ascii(str(output_path))} "
-                f"{self._target_info(target)} result=saved"
+                f"{source} result=saved"
             )
             if self.copy_to_clipboard:
                 self._copy_to_clipboard(pixmap)
             return output_path
         except Exception as error:
             self._debug(
-                f"<< Capture failed {self._target_info(target)} "
+                f"<< Capture failed {source} "
                 f"error_type={type(error).__name__} result=failed"
             )
             raise OSError(f"화면 캡처 실패: {error}") from error

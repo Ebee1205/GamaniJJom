@@ -9,6 +9,7 @@ from src.models.window_enum import WindowEvent
 from src.models.toolbar_enum import CaptureMode, ToolbarEdge
 from src.models.window_schema import WindowClosedError, WindowRect
 from src.services.toolbar_state_service import reduce_toolbar
+from src.ui.toolbar.region_capture import RegionCapture
 from src.ui.toolbar.toolbar_drag_gesture import ToolbarDragGesture
 from src.ui.toolbar.widget.toolbar_theme import THEME_ALIASES, available_themes
 
@@ -69,6 +70,7 @@ class ToolbarController(QObject):
         self._capturing = False
         self._wd_list_dialog = None
         self._picker = None
+        self._region = None
         self._target_was_lost = False
         self._disposed = False
         self._watch_attempted = False
@@ -96,6 +98,7 @@ class ToolbarController(QObject):
         toolbar.capture_options_requested.connect(
             lambda: self.notification.emit("캡처 옵션은 준비 중입니다."))
         for signal, slot in (
+            (toolbar.region_capture_requested, self.begin_region_capture),
             (toolbar.window_list_requested, self.open_window_list),
             (toolbar.disconnect_requested, self.disconnect_target),
             (toolbar.lock_requested, self.toggle_lock),
@@ -210,6 +213,8 @@ class ToolbarController(QObject):
         self._watch_attempted = False
         self._snapshot = None
         self.attachment = Attachment(target_info) if target_info is not None else None
+        if self._region is not None:
+            self._region.observe(target_info)
         if self.registry is not None:
             self.registry.attachments.clear()
             if self.attachment is not None:
@@ -291,6 +296,8 @@ class ToolbarController(QObject):
 
     def begin_target_pick(self):
         from ui.toolbar.toolbar_picker_gesture import ToolbarPickerGesture
+        if self._region is not None:
+            self._region.cancel_selection()
         self._debug("PICKER", "Window selection requested")
         self.window.toolbar.menu.hide()
         if hasattr(self.window.toolbar, 'more_menu'):
@@ -351,9 +358,28 @@ class ToolbarController(QObject):
         self.sync()
         self.changed.emit()
 
+    def begin_region_capture(self):
+        if self._disposed or self._capturing:
+            return
+        self.cancel_drag()
+        if self._picker is not None:
+            self._picker.stop()
+        if self._region is None:
+            self._region = RegionCapture(self)
+            self._region.changed.connect(self.sync)
+            self._region.notification.connect(self.notification.emit)
+            self.update()
+        self._region.start()
+
     def capture(self):
         if self._capturing:
             return
+        if self._region is not None:
+            if self._region.selecting:
+                return
+            if self._region.rect is not None:
+                self._capture_region()
+                return
         primary = self.state.capture_mode == CaptureMode.PRIMARY_SCREEN
         if not primary and not self._require_attachment():
             return
@@ -375,12 +401,24 @@ class ToolbarController(QObject):
         else:
             toolbar.capture_button.setEnabled(not busy)
 
-    def _complete_capture(self, requested_target):
+    def _capture_region(self):
+        self._capturing = True
+        self._capturing_primary_screen = True  # Hide the toolbar for desktop pixel grabs.
+        self._set_capture_busy(True)
+        self._region.set_suspended(True)
+        self.window.toolbar.more_menu.hide()
+        self.render()
+        QTimer.singleShot(35, lambda: self._complete_capture(None, region=True))
+
+    def _complete_capture(self, requested_target, *, region=False):
         if self._disposed:
             self._capturing = False
             return
         try:
-            if requested_target is None:
+            if region:
+                self.update()
+                saved_path = self.capture_service.capture_region(self._region.capture_rect())
+            elif requested_target is None:
                 saved_path = self.capture_service.capture_primary_screen()
             else:
                 target = self.windows.read(requested_target)
@@ -394,6 +432,8 @@ class ToolbarController(QObject):
             self._capturing = False
             if not self._disposed:
                 self._set_capture_busy(False)
+                if region:
+                    self._region.set_suspended(False)
                 if primary:
                     self.update()
 
@@ -422,7 +462,8 @@ class ToolbarController(QObject):
         if hasattr(toolbar, 'set_target'):
             toolbar.set_target(self.attachment.target if self.attachment is not None else None,
                                lost=self._target_was_lost,
-                               primary_screen=self.state.capture_mode == CaptureMode.PRIMARY_SCREEN)
+                               primary_screen=self.state.capture_mode == CaptureMode.PRIMARY_SCREEN,
+                               region_active=self._region is not None and self._region.rect is not None)
 
     def reveal(self):
         self.update()
@@ -520,6 +561,8 @@ class ToolbarController(QObject):
         title_changed = self.attachment.target.title != snapshot.target.title
         self.attachment.target = snapshot.target
         self._snapshot = snapshot
+        if self._region is not None:
+            self._region.observe(snapshot.target, visible=snapshot.show_toolbar)
         self.dispatch(tb_es.TargetStateObserved(snapshot))
         if snapshot.visible:
             self._enforce_lock(snapshot)
@@ -596,6 +639,8 @@ class ToolbarController(QObject):
         if self._picker is not None:
             self._picker.stop()
             self._picker.deleteLater()
+        if self._region is not None:
+            self._region.dispose()
         self._disposed = True
         self._event_timer.stop()
         self.drag.end()

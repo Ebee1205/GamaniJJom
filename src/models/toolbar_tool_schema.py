@@ -23,4 +23,5 @@ TOOLBAR_TOOLS = (
     ToolbarTool('app_select', 'app_select', '창 변경', 'action', WINDOW_TOOLS),
     ToolbarTool('lock', 'lock', '잠금', 'toggle', LOCK_TOOLS),
     ToolbarTool('more', 'more', '더보기'),
+    ToolbarTool('region_capture', 'region_capture', '영역 캡처'),
 )
