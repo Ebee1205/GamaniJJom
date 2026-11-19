@@ -14,10 +14,13 @@ from enum import IntEnum
 from pathlib import Path
 
 # python src/main.py 와 python -m src.main 실행 방식을 모두 지원한다.
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_CONFIG_PATH = PROJECT_ROOT / "src" / "config" / "gamani-jjom.cfg.json"
+PROJECT_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.runtime_paths import data_root, default_config_path, is_frozen, prepare_default_config
+
+DEFAULT_CONFIG_PATH = default_config_path()
 
 
 class ExitCode(IntEnum):
@@ -53,13 +56,15 @@ def initialize_context(config_path: Path):
     """설정을 불러오고 애플리케이션 로거를 초기화한다."""
     from src.app_context import AppContext
 
+    if is_frozen() and config_path.resolve() == DEFAULT_CONFIG_PATH.resolve():
+        prepare_default_config()
     ctx = AppContext()
     cfg = ctx.load_config(str(config_path))
 
     log_path = Path(cfg.logger.path).expanduser()
 
     if not log_path.is_absolute():
-        log_path = PROJECT_ROOT / log_path
+        log_path = data_root() / log_path
 
     # logger 초기화
     cfg.logger.path = str(log_path)

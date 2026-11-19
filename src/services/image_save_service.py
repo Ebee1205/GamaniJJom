@@ -7,6 +7,8 @@ from PySide6.QtCore import QBuffer, QIODevice
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QApplication
 
+from src.runtime_paths import data_root
+
 
 class ImageSaveService:
     def __init__(self, save_path: str | Path = "D:/saves/"):
@@ -45,7 +47,7 @@ class ImageSaveService:
         """상대 경로면 프로젝트 루트 기준으로 해석한다."""
         directory = Path(save_path).expanduser()
         if not directory.is_absolute():
-            directory = Path(__file__).resolve().parents[2] / directory
+            directory = data_root() / directory
         return directory
 
     @staticmethod
