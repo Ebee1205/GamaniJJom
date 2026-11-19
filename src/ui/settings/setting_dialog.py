@@ -185,6 +185,7 @@ class SettingDialog(QDialog):
         save = self._add_page("저장", self._build_save_page())
         self._add_page("파일명", self._build_filename_page(), parent=save)
         self._add_page("캡처 후 동작", self._build_after_capture_page(), parent=save)
+        self._add_page("툴바", self._build_toolbar_page())
 
         self.nav.expandAll()
         self.nav.setCurrentItem(self.nav.topLevelItem(0))
@@ -259,6 +260,12 @@ class SettingDialog(QDialog):
         page, form = self._new_page()
         form.addRow(self._check_field("save.notification_enabled", "캡처 완료 알림 표시"))
         form.addRow(self._check_field("save.copy_to_clipboard", "클립보드에 자동 복사"))
+        return page
+
+    def _build_toolbar_page(self) -> QWidget:
+        page, form = self._new_page()
+        form.addRow("툴바 테마", self._combo_field(
+            "theme", [("원형", "circle"), ("사각형", "square")]))
         return page
 
     @staticmethod

@@ -81,6 +81,8 @@ class TrayController(QObject):
         if config is None:
             return
         self.capture.configure(config.save)
+        if self.toolbar_controller is not None:
+            self.toolbar_controller.switch_renderer(config.theme)
         if self.log is not None:
             self.log.debug("SETTINGS", "!! Runtime settings applied")
 
@@ -176,7 +178,7 @@ class TrayController(QObject):
 
     def ensure_toolbar(self):
         if self.toolbar_controller is None:
-            window = ToolbarWidget()
+            window = ToolbarWidget(theme=self.ctx.cfg.theme)
             controller = ToolbarController(window, None, self.locks, self.capture,
                                            self.tracking, self.windows, self)
             controller.notification.connect(self.notify)

@@ -38,11 +38,15 @@ class SaveConfig(BaseModel):
     filename: FilenameConfig = Field(default_factory=FilenameConfig)
 
 
+ToolbarThemeName = Literal["circle", "square"]
+
+
 class AppConfig(BaseModel):
     environment: str
     project_name: str
     logger: LoggerConfig
     save: SaveConfig
+    theme: ToolbarThemeName = "square"
 
 
 class AppContext:

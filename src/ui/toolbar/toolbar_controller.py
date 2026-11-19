@@ -10,6 +10,7 @@ from src.models.toolbar_enum import CaptureMode, ToolbarEdge
 from src.models.window_schema import WindowClosedError, WindowRect
 from src.services.toolbar_state_service import reduce_toolbar
 from src.ui.toolbar.toolbar_drag_gesture import ToolbarDragGesture
+from src.ui.toolbar.widget.toolbar_theme import THEME_ALIASES, available_themes
 
 EVENT_COALESCE_INTERVAL_MS = 16
 NO_TARGET_MESSAGE = "연결된 대상 창이 없습니다."
@@ -90,7 +91,6 @@ class ToolbarController(QObject):
         toolbar = window.toolbar
         window.log = toolbar.log = toolbar.handle.log = self.log
 
-        toolbar.window_select_button.clicked.connect(self.open_window_list)
         if hasattr(toolbar, 'pick_requested'):
             toolbar.pick_requested.connect(self.begin_target_pick)
         toolbar.capture_options_requested.connect(
@@ -316,7 +316,7 @@ class ToolbarController(QObject):
     def switch_renderer(self, mode):
         if mode == self.window.mode:
             return
-        if mode not in ('circle', 'bar'):
+        if mode not in available_themes() and mode not in THEME_ALIASES:
             raise ValueError('Unknown toolbar renderer')
         self.cancel_drag()
         if self._picker is not None:
@@ -325,7 +325,6 @@ class ToolbarController(QObject):
         if self._wd_list_dialog is not None:
             self._wd_list_dialog.reject()
         self.window.set_mode(mode)
-        self._connect_toolbar_signals()
         self.sync()
         if hasattr(self.window.toolbar, 'set_capture_busy'):
             self.window.toolbar.set_capture_busy(self._capturing)
@@ -401,8 +400,6 @@ class ToolbarController(QObject):
     def sync(self):
         toolbar = self.window.toolbar
         attached = self.state.attached
-        toolbar.window_select_button.setToolTip("창 선택/변경 · 가리킨 창에 연결하고 점착")
-        toolbar.window_select_button.setAccessibleName("창 선택/변경")
         if (self.state.connected and not attached and self.state.free_position is not None
                 and self.state.free_anchor is None):
             try:

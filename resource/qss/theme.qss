@@ -69,7 +69,6 @@
     --font-size-small: 11px;
     --font-size-heading: 19px;
     --font-size-page-title: 15px;
-    --font-size-drag-handle: 20px;
     --font-weight-heading: 600;
 }
 
@@ -181,8 +180,13 @@ QFrame#toolbarSurface, QFrame#dialogSurface {
     border-radius: var(--radius-surface);
 }
 
-/* ToolbarBaseWidget / CmmButton / DragHandle */
-QLabel#dragHandle { color: var(--color-text-subtle); font-size: var(--font-size-drag-handle); }
+/* ToolbarWidget: shape theme. Registered names: circle (default), square.
+   Only the shape is chosen here (a stylesheet cannot describe a fan or a strip);
+   fills, borders and text keep coming from the tokens above.
+   Register more in Python with register_theme(). */
+QWidget#toolbarWindow { qproperty-toolbarTheme: "circle"; }
+
+/* CmmButton */
 QToolButton#toolbarButton { background: var(--bg-transparent); border: none; border-radius: var(--radius-tool); }
 QToolButton#toolbarButton:hover { background: var(--bg-tool-hover); }
 QToolButton#toolbarButton:checked { background: var(--bg-tool-checked); }

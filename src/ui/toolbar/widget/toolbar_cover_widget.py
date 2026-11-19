@@ -1,40 +1,157 @@
-"""Compact capture circle plus an independent radial overlay; bar stays intact."""
+"""The toolbar's main face. Click captures, dragging moves, right-press expands.
+
+Behaviour is theme-independent; the active ToolbarTheme only supplies the shape
+and the painting. Signals and the small action/state surface below form the
+contract the controller talks to.
+"""
 from math import hypot
 import time
 
-from PySide6.QtCore import QEvent, QPoint, QPointF, QRectF, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QPainter, QPen
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtCore import QEvent, QPoint, QPointF, QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QPainter
+from PySide6.QtWidgets import QApplication, QMenu, QWidget
+from shiboken6 import isValid
 
-from src.ui.resources import icon, theme_color
-from src.ui.toolbar.widget.toolbar_inner_widget import ToolBarInnerWidget
-from src.ui.toolbar.widget.toolbar_base_widget import ToolbarBaseWidget
+from src.ui.cmm.cmm_button import CmmButton
+from src.ui.toolbar.widget.toolbar_inner_widget import ToolbarInnerWidget
+from src.ui.toolbar.widget.toolbar_theme import CoverState
+
+DRAG_THRESHOLD = 5   # logical pixels before a press becomes a drag
 
 
-class CircleDragSurface(QWidget):
-    """A click captures; movement of 5 logical pixels starts toolbar dragging."""
+class ToolbarCoverWidget(QWidget):
+    # ---- Controller contract: requests ----------------------------------------------
+    window_list_requested = Signal()
+    disconnect_requested = Signal()
+    lock_requested = Signal()
+    capture_requested = Signal()
+    position_requested = Signal()
+    capture_options_requested = Signal()
+    settings_requested = Signal()
+    attach_requested = Signal()
+    hide_requested = Signal()
+    reset_requested = Signal()
+    quit_requested = Signal()
+    pick_requested = Signal()
+    # ---- Drag session boundaries -----------------------------------------------------
+    dragged = Signal(int, int)  # Compatibility only; the controller uses the boundaries below.
     drag_started = Signal()
     drag_moved = Signal()
     drag_finished = Signal()
     drag_cancelled = Signal()
+    # ---- Expand / collapse -----------------------------------------------------------
+    expanded_changed = Signal(bool)
 
-    def __init__(self, toolbar):
-        super().__init__(toolbar)
-        self.toolbar = toolbar
+    def __init__(self, theme, parent=None):
+        super().__init__(parent)
         self.log = None
-        self._press = None
-        self._moving = False
-        self.setGeometry(0, 0, 60, 60)
+        self.theme = theme
+        self.dock = None
+        self.setObjectName('toolbarCover')
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAutoFillBackground(False)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setAccessibleName('어플리케이션 캡처 · 드래그하여 이동 · 우클릭 도구')
 
+        self._press = None
+        self._moving = False
+        self._primary_screen = False
+        self._title = None
+        self._had_target = False
+        self._busy = False
+        self._flash_until = 0
+        self._angle = 0
+        self._more_pending = False
+
+        self._build_actions()
+        self._build_more_menu()
+        self.menu = ToolbarInnerWidget(self)   # the expanded menu
+        self.menu.opened.connect(lambda: self.expanded_changed.emit(True))
+        self.menu.closed.connect(lambda: self.expanded_changed.emit(False))
+        QApplication.instance().focusWindowChanged.connect(self._more_focus_changed)
+
+        self._pulse = QTimer(self)
+        self._pulse.setInterval(16)
+        self._pulse.timeout.connect(self._animate)
+        self.set_theme(theme)
+        self.set_target(None)
+
+    def _build_actions(self):
+        # Hidden state/action holders: checked/enabled state and click signals the
+        # controller already relies on. They are never shown.
+        self.lock_button = CmmButton('unlock', '현재 위치·크기 고정', self, checkable=True)
+        self.capture_button = CmmButton('capture', '화면 캡처 · 준비 중', self)
+        self.lock_button.clicked.connect(lambda: self.lock_requested.emit())
+        self.lock_button.secondary_requested.connect(self.position_requested.emit)
+        self.capture_button.clicked.connect(self.capture_requested.emit)
+        self.capture_button.secondary_requested.connect(self.capture_options_requested.emit)
+        self.lock_button.toggled.connect(lambda _checked: self.update())
+        self.lock_button.hide()
+        self.capture_button.hide()
+
+    def _build_more_menu(self):
+        self.more_menu = QMenu(self)
+        for text, signal in (('위치 초기화', self.reset_requested),
+                             ('설정', self.settings_requested),
+                             ('종료', self.quit_requested)):
+            self.more_menu.addAction(text, signal.emit)
+        self.more_menu.triggered.connect(
+            lambda action: self._log(f'>> Menu action selected index={self.more_menu.actions().index(action)}'))
+        self.more_menu.aboutToHide.connect(lambda: self._log('<< More menu closed'))
+
+    def _log(self, message):
+        if self.log is not None:
+            self.log.debug('TOOLBAR', message)
+
+    # ---- Theme -----------------------------------------------------------------------
+    def set_theme(self, theme):
+        self.collapse()
+        self.theme = theme
+        self.setFixedSize(theme.cover_size)
+        self.update()
+
+    def sizeHint(self):
+        return self.theme.cover_size if self.theme is not None else QSize(60, 60)
+
+    def cover_state(self):
+        return CoverState(
+            dock=self.dock, locked=self.lock_button.isChecked(), hovered=self.underMouse(),
+            has_target=self._title is not None, had_target=self._had_target,
+            primary_screen=self._primary_screen, busy=self._busy, spin_angle=self._angle,
+            flashing=time.monotonic() < self._flash_until)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.theme.paint_cover(painter, QPointF(self.width() / 2, self.height() / 2), self.cover_state())
+
+    # ---- Expand / collapse -----------------------------------------------------------
+    @property
+    def is_expanded(self):
+        return self.menu.isVisible()
+
+    def _global_center(self):
+        return self.mapToGlobal(QPoint(self.width() // 2, self.height() // 2))
+
+    def expand(self, *, right_tracking=False):
+        if not self.is_expanded:
+            self.menu.open_ring(self._global_center(), right_tracking=right_tracking)
+
+    def collapse(self):
+        self.menu.close_menu()
+
+    def toggle_expanded(self):
+        self.menu.open_ring(self._global_center())
+
+    show_menu = toggle_expanded   # name used before the base toolbar was removed
+
+    # ---- Pointer: click / drag / right-press -----------------------------------------
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self._press = event.globalPosition()
             self._moving = False
         elif event.button() == Qt.MouseButton.RightButton:
-            self.toolbar.menu.open_ring(self.mapToGlobal(QPoint(30, 30)), right_tracking=True,
-                                        press_position=event.globalPosition())
+            self.expand(right_tracking=True)
         event.accept()
 
     def mouseMoveEvent(self, event):
@@ -43,7 +160,7 @@ class CircleDragSurface(QWidget):
                 self.cancel_drag()
                 return
             delta = event.globalPosition() - self._press
-            if not self._moving and hypot(delta.x(), delta.y()) >= 5:
+            if not self._moving and hypot(delta.x(), delta.y()) >= DRAG_THRESHOLD:
                 self._moving = True
                 self.drag_started.emit()
             if self._moving:
@@ -57,8 +174,8 @@ class CircleDragSurface(QWidget):
             self._moving = False
             if moving:
                 self.drag_finished.emit()
-            elif hypot(event.position().x() - 30, event.position().y() - 30) <= 30:
-                self.toolbar.capture_or_select()
+            elif self.theme.cover_contains(event.position()):
+                self.capture_or_select()
         event.accept()
 
     def cancel_drag(self):
@@ -70,62 +187,25 @@ class CircleDragSurface(QWidget):
         if moving:
             self.drag_cancelled.emit()
 
+    @property
+    def handle(self):
+        """The drag surface is the cover itself (kept for callers of the old handle)."""
+        return self
+
+    def enterEvent(self, event):
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.update()
+        super().leaveEvent(event)
+
     def event(self, event):
         if event.type() in (QEvent.Type.UngrabMouse, QEvent.Type.Hide):
             self.cancel_drag()
         return super().event(event)
 
-
-class ToolBarCoverWidget(ToolbarBaseWidget):
-    """Same signal/button contract as ToolbarBaseWidget, rendered as a circle.
-
-    Inherited hidden buttons are action/state objects. Both renderers therefore
-    use the same controller and services without creating another toolbar.
-    """
-    pick_requested = Signal()
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        layout = self.layout()
-        while layout.count():
-            item = layout.takeAt(0)
-            if item.widget() is not None:
-                item.widget().hide()
-        layout.setContentsMargins(0, 0, 0, 0)
-        self.handle.deleteLater()
-        self.handle = CircleDragSurface(self)
-        self.handle.drag_started.connect(self.drag_started.emit)
-        self.handle.drag_moved.connect(self.drag_moved.emit)
-        self.handle.drag_finished.connect(self.drag_finished.emit)
-        self.handle.drag_cancelled.connect(self.drag_cancelled.emit)
-        self.more_menu = self.menu
-        self.more_menu.setParent(self)
-        self.menu = ToolBarInnerWidget(self)
-        self._more_pending = False
-        QApplication.instance().focusWindowChanged.connect(self._more_focus_changed)
-        self.setObjectName('circleToolbar')
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setAutoFillBackground(False)
-        self.setFixedSize(60, 60)
-        self.dock = None
-        self._primary_screen = False
-        self._title = None
-        self._had_target = False
-        self._busy = False
-        self._flash_until = 0
-        self._angle = 0
-        self._pulse = QTimer(self)
-        self._pulse.setInterval(16)
-        self._pulse.timeout.connect(self._animate)
-        self.lock_button.toggled.connect(lambda _checked: self.update())
-        self.set_target(None)
-
-    def sizeHint(self):
-        return QSize(60, 60)
-
-    def show_menu(self):
-        self.menu.open_ring(self.mapToGlobal(self.rect().center()))
-
+    # ---- "More" popup (reset / settings / quit) --------------------------------------
     def show_more_menu(self):
         self.menu.close_menu()
         self._more_pending = True
@@ -146,17 +226,20 @@ class ToolBarCoverWidget(ToolbarBaseWidget):
         if focus is not None and not focus.isVisible():
             return
         self._more_pending = False
-        self.more_menu.popup(self.mapToGlobal(self.rect().center()))
+        self.more_menu.popup(self._global_center())
 
+    # ---- Docking ---------------------------------------------------------------------
     def set_dock(self, edge):
         if edge == self.dock:
             return
         self.dock = edge
         self.update()
-        if self.window() is not self:
-            self.window()._apply_shape()
+        window = self.window()
+        if window is not self and hasattr(window, 'apply_shape'):
+            window.apply_shape()
         self.menu.update()
 
+    # ---- Tools (called by the inner menu) --------------------------------------------
     def capture_or_select(self):
         if self._busy:
             return
@@ -191,6 +274,7 @@ class ToolBarCoverWidget(ToolbarBaseWidget):
     def tool_checked(self, tool_id):
         return self.lock_button.isChecked() if tool_id == 'lock' else False
 
+    # ---- State pushed by the controller ----------------------------------------------
     def set_target(self, target, *, lost=False, primary_screen=False):
         self._primary_screen = primary_screen
         self._title = target.title if target is not None else None
@@ -201,11 +285,15 @@ class ToolBarCoverWidget(ToolbarBaseWidget):
                 else '클릭하여 캡처할 어플리케이션 지정')
         if primary_screen:
             text = '주모니터 전체 화면 캡처'
-        self.handle.setToolTip(text + '\n드래그: 이동 · 우클릭: 도구')
+        self.setToolTip(text + '\n드래그: 이동 · 우클릭: 도구')
         self.update()
 
-    def set_locked(self, enabled):
-        super().set_locked(enabled)
+    def set_locked(self, enabled: bool):
+        self.lock_button.setChecked(enabled)
+        self.lock_button.set_icon('lock' if enabled else 'unlock')
+        text = '위치·크기 고정 중 · 클릭하여 해제' if enabled else '현재 위치·크기 고정'
+        self.lock_button.setToolTip(text + ' · 우클릭: 좌표 설정')
+        self.lock_button.setAccessibleName(text)
         self.update()
 
     def set_capture_busy(self, busy):
@@ -224,59 +312,22 @@ class ToolBarCoverWidget(ToolbarBaseWidget):
         if not self._busy and time.monotonic() >= self._flash_until:
             self._pulse.stop()
 
-    def paint_center(self, painter, center):
-        rect = QRectF(center.x() - 30, center.y() - 30, 60, 60)
-        locked = self.lock_button.isChecked()
-        fill = 'bg-tool-checked' if locked else 'bg-button-hover' if self.handle.underMouse() else 'bg-button'
-        painter.setBrush(theme_color(fill))
-        painter.setPen(QPen(theme_color('border-primary' if locked else 'border-button'), 1))
-        painter.drawEllipse(rect)
-        painter.setOpacity(.4 if self._title is None and self._had_target else 1)
-        icon('radial_monitor' if self._primary_screen else 'radial_camera').paint(painter, int(center.x() - 13), int(center.y() - 13), 26, 26)
-        painter.setOpacity(1)
-        if locked:
-            self._badge(painter, center + QPointF(18, 18), 'lock')
-        if self._title is None and not self._primary_screen:
-            self._badge(painter, center + QPointF(-18, 18), text='!' if self._had_target else '?')
-        if self._busy:
-            painter.setPen(QPen(theme_color('color-capture-progress'), 3))
-            painter.drawArc(rect.adjusted(3, 3, -3, -3), self._angle * 16, 110 * 16)
-        if time.monotonic() < self._flash_until:
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(theme_color('bg-capture-flash'))
-            painter.drawEllipse(rect)
-
-    @staticmethod
-    def _badge(painter, center, icon_name=None, text=None):
-        painter.setPen(QPen(theme_color('border-toolbar-badge'), 1))
-        painter.setBrush(theme_color('bg-toolbar-badge'))
-        painter.drawEllipse(center, 8, 8)
-        if icon_name:
-            icon(icon_name).paint(painter, int(center.x() - 5), int(center.y() - 5), 10, 10)
-        else:
-            painter.setPen(theme_color('color-toolbar-badge'))
-            painter.drawText(QRectF(center.x() - 8, center.y() - 8, 16, 16), Qt.AlignmentFlag.AlignCenter, text)
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        if self.dock:
-            from PySide6.QtCore import QRect
-            clips = {'right': QRect(30, 0, 30, 60), 'left': QRect(0, 0, 30, 60),
-                     'top': QRect(0, 0, 60, 30), 'bottom': QRect(0, 30, 60, 30)}
-            painter.setClipRect(clips[self.dock])
-        self.paint_center(painter, QPointF(30, 30))
-
+    # ---- Lifecycle -------------------------------------------------------------------
     def hideEvent(self, event):
         self._more_pending = False
-        self.menu.hide()
+        if isValid(self.menu):   # already gone while the application shuts down
+            self.menu.hide()
         self.more_menu.hide()
-        self.handle.cancel_drag()
+        self.cancel_drag()
         super().hideEvent(event)
 
     def dispose(self):
         self._more_pending = False
         self._pulse.stop()
+        try:
+            QApplication.instance().focusWindowChanged.disconnect(self._more_focus_changed)
+        except (RuntimeError, TypeError):
+            pass
         self.more_menu.hide()
         self.menu.close_menu()
         self.menu.deleteLater()
