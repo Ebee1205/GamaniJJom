@@ -2,7 +2,7 @@
 from math import atan2, cos, hypot, pi, radians, sin
 
 from PySide6.QtCore import QPointF, QRectF, QSize
-from PySide6.QtGui import QPainterPath, QPen, QRegion
+from PySide6.QtGui import QPainterPath, QPen
 
 from src.ui.resources import theme_color
 
@@ -156,7 +156,8 @@ class ThemeCircle(ToolbarTheme):
         return hypot(point.x() - COVER / 2, point.y() - COVER / 2) <= COVER / 2
 
     def cover_mask(self, dock):
-        return self.clip_to_dock(QRegion(0, 0, COVER, COVER, QRegion.RegionType.Ellipse), dock)
+        """Keep the translucent antialiased edge instead of a binary window mask."""
+        return None
 
     def paint_busy(self, painter, rect, angle):
         painter.setPen(QPen(theme_color('color-capture-progress'), 3))
