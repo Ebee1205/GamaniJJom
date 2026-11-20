@@ -203,6 +203,8 @@ QWidget#captureRegionBar QLabel, QWidget#captureRegionBar QToolButton {
     font-size: var(--font-size-body);
 }
 QWidget#captureRegionBar QLabel#muted { color: var(--color-text-muted); }
+QWidget#captureRegionBar QLineEdit#captureRegionSize { padding: 2px 5px; }
+QWidget#captureRegionBar QLineEdit#captureRegionSize:read-only { color: var(--color-text-muted); }
 QWidget#captureRegionBar QToolButton {
     background: var(--bg-transparent);
     border: none;
@@ -213,6 +215,7 @@ QWidget#captureRegionBar QToolButton#captureRegionButton { background: var(--bg-
 QWidget#captureRegionBar QToolButton#captureRegionButton:hover { background: var(--bg-primary-hover); }
 QWidget#captureRegionBar QToolButton:hover { background: var(--bg-tool-hover); }
 QWidget#captureRegionBar QToolButton:checked { background: var(--bg-tool-checked); }
+QWidget#captureRegionBar QToolButton:disabled { color: var(--color-text-muted); }
 QWidget#captureRegionBar QToolButton:pressed,
 QWidget#captureRegionBar QToolButton#captureRegionButton:pressed { background: var(--bg-tool-pressed); }
 

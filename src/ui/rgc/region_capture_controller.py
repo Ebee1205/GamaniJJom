@@ -32,6 +32,7 @@ class RegionCaptureController(QObject):
         self._dialog.lock_requested.connect(self._set_size_locked)
         self._dialog.moved.connect(self._move_region)
         self._dialog.resized.connect(self._resize_region)
+        self._dialog.size_requested.connect(self._set_size)
 
     def start(self):
         if self.selecting:
@@ -99,9 +100,13 @@ class RegionCaptureController(QObject):
             self.refresh()
 
     def _resize_region(self, dx, dy):
-        if self.rect is not None and not self._size_locked:
-            self.rect = replace(self.rect, width=max(MIN_SIZE, self.rect.width + dx),
-                                height=max(MIN_SIZE, self.rect.height + dy))
+        if self.rect is not None:
+            self._set_size(max(MIN_SIZE, self.rect.width + dx),
+                           max(MIN_SIZE, self.rect.height + dy))
+
+    def _set_size(self, width, height):
+        if self.rect is not None and not self._size_locked and not self.selecting:
+            self.rect = replace(self.rect, width=width, height=height)
             self.refresh()
 
     def _set_size_locked(self, locked):

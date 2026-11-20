@@ -24,6 +24,7 @@ class WdSizeController(QObject):
         self.window.window_list.log = self.log
         self.window.available_list.log = self.log
         self.pending = None
+        self.region_locks = {}  # identity -> (locked, (width, height) | None)
         self.verify_timer = QTimer(self)
         self.verify_timer.setSingleShot(True)
         self.verify_timer.timeout.connect(self.verify)
@@ -31,6 +32,8 @@ class WdSizeController(QObject):
         self.window.target_requested.connect(self.target_requested.emit)
         self.window.refresh_requested.connect(self.refresh)
         self.position.apply_requested.connect(self.apply_position)
+        self.position.size_apply_requested.connect(self.apply_size)
+        self.position.region_lock_changed.connect(self.set_region_lock)
         self.refresh_timer = QTimer(self)
         self.refresh_timer.setInterval(1000)
         self.refresh_timer.timeout.connect(self.refresh_visible)
@@ -75,6 +78,10 @@ class WdSizeController(QObject):
             statuses = {window.identity: "연결됨" if window.identity in attached else "미연결" for window in windows}
             self.window.available_list.set_windows(windows, statuses, connected_identities=attached)
             self.window.all_count.setText(f"{len(windows)}개")
+            # Drop region-lock state of windows that no longer exist.
+            alive = {window.identity for window in windows}
+            for identity in [key for key in self.region_locks if key not in alive]:
+                del self.region_locks[identity]
         except OSError as error:
             if self.log is not None:
                 self.log.debug("SETTINGS", f"<< UI operation ended error_type={type(error).__name__}")
@@ -94,8 +101,44 @@ class WdSizeController(QObject):
                 self.log.debug("SETTINGS", f"<< UI operation ended error_type={type(error).__name__}")
             self.notification.emit(str(error))
             return
-        self.position.set_target(current)
+        locked, size = self.region_locks.get(target.identity, (False, None))
+        self.position.set_target(current, region_locked=locked, region_size=size)
         show_dialog(self.position)
+
+    def set_region_lock(self, locked):
+        target = self.position.target
+        if target is None:
+            return
+        size = None
+        if locked:
+            inputs = self.position.region_inputs
+            try:
+                size = (int(inputs["width"].text()), int(inputs["height"].text()))
+            except ValueError:
+                size = None
+        self.region_locks[target.identity] = (locked, size)
+        if self.log is not None:
+            self.log.debug("SETTINGS", f"== Region size lock locked={locked} size={size}")
+
+    def apply_size(self, size):
+        """Apply only width/height, keeping the current x/y."""
+        if self.log is not None:
+            self.log.debug("SETTINGS", f">> Region size apply requested width={size[0]} height={size[1]}")
+        target = self.position.target
+        if self.pending is not None or target is None:
+            return
+        if self.region_locks.get(target.identity, (False, None))[0]:
+            self.position.status.setText("크기가 Lock 상태입니다. Unlock 후 적용하세요.")
+            return
+        try:
+            current = self.windows.read(target)
+        except OSError as error:
+            if self.log is not None:
+                self.log.debug("SETTINGS", f"<< UI operation ended error_type={type(error).__name__}")
+            self.position.status.setText(f"적용 실패: {error}")
+            return
+        rect = type(current.rect)(current.rect.x, current.rect.y, size[0], size[1])
+        self.apply_position(rect)  # validation → apply → verify flow is reused
 
     def apply_position(self, rect):
         if self.log is not None:
@@ -152,6 +195,7 @@ class WdSizeController(QObject):
         self.verify_timer.stop()
         self.refresh_timer.stop()
         self.pending = None
+        self.region_locks.clear()
         for window in (self.window, self.position):
             window.hide()
             window.close()
