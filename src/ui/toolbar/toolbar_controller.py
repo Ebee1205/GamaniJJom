@@ -9,7 +9,7 @@ from src.models.window_enum import WindowEvent
 from src.models.toolbar_enum import CaptureMode, ToolbarEdge
 from src.models.window_schema import WindowClosedError, WindowRect
 from src.services.toolbar_state_service import reduce_toolbar
-from src.ui.toolbar.region_capture import RegionCapture
+from src.ui.rgc.region_capture import RegionCapture
 from src.ui.toolbar.toolbar_drag_gesture import ToolbarDragGesture
 from src.ui.toolbar.widget.toolbar_theme import THEME_ALIASES, available_themes
 
