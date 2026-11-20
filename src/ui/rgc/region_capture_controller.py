@@ -11,7 +11,7 @@ def _move(rect, dx, dy):
 
 
 class RegionCaptureController(QObject):
-    """Keep the chosen rectangle relative to the current target's top-left."""
+    """Keep the capture region in screen or target-relative coordinates."""
     capture_requested = Signal()
     notification = Signal(str)
 
@@ -24,12 +24,14 @@ class RegionCaptureController(QObject):
         self._target_rect = None
         self._target_visible = True
         self._size_locked = False
+        self._position_pinned = False
         self._dialog = RegionCaptureDialog()
         self._dialog.preview.connect(self._present)
         self._dialog.finished.connect(self._finish_selection)
         self._dialog.capture_requested.connect(self.capture_requested.emit)
         self._dialog.clear_requested.connect(self.clear)
         self._dialog.lock_requested.connect(self._set_size_locked)
+        self._dialog.pin_requested.connect(self._set_position_pinned)
         self._dialog.moved.connect(self._move_region)
         self._dialog.resized.connect(self._resize_region)
         self._dialog.size_requested.connect(self._set_size)
@@ -55,12 +57,14 @@ class RegionCaptureController(QObject):
             origin = self._target_rect
             self.rect = _move(rect, -origin.x, -origin.y) if origin else rect
             self._size_locked = False
+            self._position_pinned = False
         self.selecting = False
         self.refresh()
 
     def clear(self):
         self.rect = None
         self._size_locked = False
+        self._position_pinned = False
         self.refresh()
 
     def observe(self, target, *, visible=True):
@@ -69,7 +73,7 @@ class RegionCaptureController(QObject):
         if (reference, origin, visible) == (self._target, self._target_rect, self._target_visible):
             return
         # Preserve the last screen position on disconnect or a target switch.
-        if self.rect is not None and reference != self._target:
+        if self.rect is not None and not self._position_pinned and reference != self._target:
             rect = self.screen_rect
             self.rect = _move(rect, -origin.x, -origin.y) if origin else rect
         self._target, self._target_rect, self._target_visible = reference, origin, visible
@@ -78,11 +82,15 @@ class RegionCaptureController(QObject):
 
     @property
     def screen_rect(self):
-        origin = self._target_rect
+        origin = None if self._position_pinned else self._target_rect
         return _move(self.rect, origin.x, origin.y) if self.rect and origin else self.rect
 
+    @property
+    def _region_visible(self):
+        return self._position_pinned or self._target_visible
+
     def capture_rect(self):
-        if not self._target_visible:
+        if not self._region_visible:
             raise OSError('연결된 창을 화면에 표시한 뒤 영역을 캡처하세요.')
         return self.screen_rect
 
@@ -92,10 +100,10 @@ class RegionCaptureController(QObject):
 
     def refresh(self):
         if not self.selecting:
-            self._present(self.screen_rect if self._target_visible and not self._suspended else None)
+            self._present(self.screen_rect if self._region_visible and not self._suspended else None)
 
     def _move_region(self, dx, dy):
-        if self.rect is not None:
+        if self.rect is not None and not self._position_pinned:
             self.rect = _move(self.rect, dx, dy)
             self.refresh()
 
@@ -113,10 +121,20 @@ class RegionCaptureController(QObject):
         self._size_locked = locked
         self.refresh()
 
+    def _set_position_pinned(self, pinned):
+        if self.rect is None or self.selecting or pinned == self._position_pinned:
+            return
+        rect = self.screen_rect
+        origin = self._target_rect
+        self.rect = _move(rect, -origin.x, -origin.y) if not pinned and origin else rect
+        self._position_pinned = pinned
+        self.refresh()
+
     def _present(self, rect):
         try:
             self._dialog.present(rect, selecting=self.selecting,
-                                 follows_window=self._target is not None, locked=self._size_locked)
+                                 follows_window=self._target is not None, locked=self._size_locked,
+                                 pinned=self._position_pinned)
         except OSError as error:
             self._dialog.hide_preview()
             self.notification.emit(str(error))

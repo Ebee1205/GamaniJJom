@@ -71,6 +71,7 @@ class RegionCaptureDialog(QWidget):
     capture_requested = Signal()
     clear_requested = Signal()
     lock_requested = Signal(bool)
+    pin_requested = Signal(bool)
     moved = Signal(int, int)
     resized = Signal(int, int)
     size_requested = Signal(int, int)
@@ -126,13 +127,17 @@ class RegionCaptureDialog(QWidget):
         self._lock.setCheckable(True)
         self._lock_icons = {False: icon('lock'), True: icon('unlock')}
         self._lock.clicked[bool].connect(self.lock_requested.emit)
+        self._pin = QToolButton(self._bar)
+        self._pin.setIcon(icon('pin'))
+        self._pin.setCheckable(True)
+        self._pin.clicked[bool].connect(self.pin_requested.emit)
         self._close = QToolButton(self._bar)
         self._close.setText('✕')
         self._close.setAccessibleName('닫기')
         self._close.setToolTip('닫기')
         self._close.clicked.connect(self.clear_requested.emit)
         self._bar_controls = (self._move_handle, self._width, separator, self._height, self._size, self._apply,
-                              self._coordinates, self._lock, self._capture, self._close)
+                              self._coordinates, self._pin, self._lock, self._capture, self._close)
         for control in self._bar_controls:
             layout.addWidget(control)
 
@@ -235,7 +240,7 @@ class RegionCaptureDialog(QWidget):
         else:
             super().keyPressEvent(event)
 
-    def present(self, rect, *, selecting, follows_window, locked):
+    def present(self, rect, *, selecting, follows_window, locked, pinned):
         if rect is None:
             self.hide_preview()
             return
@@ -243,11 +248,17 @@ class RegionCaptureDialog(QWidget):
         _place(self._outline, rect)
         self._outline.raise_()
         self._size.setText(f'{rect.width} × {rect.height} px' if selecting else 'px')
-        self._coordinates.setText('창 연결' if follows_window else '연결 해제')
+        self._coordinates.setText('화면 고정' if pinned else ('창 연결' if follows_window else '연결 해제'))
         for control in self._bar_controls:
             control.setVisible(not selecting or control is self._size)
         if not selecting:
             self._show_size(rect.width, rect.height, locked)
+            self._pin.setChecked(pinned)
+            label = '화면 위치 고정 해제' if pinned else '화면 위치 고정'
+            self._pin.setToolTip(label)
+            self._pin.setAccessibleName(label)
+            self._move_handle.setEnabled(not pinned)
+            self._size.setEnabled(not pinned)
 
         monitor = window_api.monitor_at(rect.x, rect.y)
         work = monitor.work_area
