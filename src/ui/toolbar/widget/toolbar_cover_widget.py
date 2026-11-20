@@ -247,7 +247,7 @@ class ToolbarCoverWidget(QWidget):
             self.pick_requested.emit()
         elif tool_id == 'window_list':
             self.window_list_requested.emit()
-        elif tool_id == 'disconnect':
+        elif tool_id == 'disconnect' and self.tool_enabled(tool_id):
             self.disconnect_requested.emit()
         elif tool_id == 'lock':
             self.lock_button.click()
@@ -263,6 +263,8 @@ class ToolbarCoverWidget(QWidget):
             self.region_capture_requested.emit()
 
     def tool_enabled(self, tool_id):
+        if tool_id == 'disconnect':
+            return not self._primary_screen
         if tool_id in ('lock', 'window_size'):
             return self.lock_button.isEnabled()
         return True
