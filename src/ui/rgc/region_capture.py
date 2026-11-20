@@ -112,7 +112,7 @@ class _DragLabel(QLabel):
 
 class RegionCapture(QObject):
     """Keep the chosen rectangle relative to the current target's top-left."""
-    changed = Signal()
+    capture_requested = Signal()
     notification = Signal(str)
 
     def __init__(self, parent):
@@ -132,11 +132,8 @@ class RegionCapture(QObject):
         flags = FLOATING | Qt.WindowType.WindowDoesNotAcceptFocus
         self._bar = QWidget(None, flags)
         self._bar.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        self._bar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
         self._bar.setObjectName('captureRegionBar')
-        self._bar.setStyleSheet(
-            f"QWidget#captureRegionBar {{ background: {theme_token('bg-menu')}; "
-            f"border: 1px solid {theme_token('border-menu')}; border-radius: 4px; }}"
-        )
         layout = QHBoxLayout(self._bar)
         layout.setContentsMargins(8, 4, 4, 4)
         layout.setSpacing(5)
@@ -145,6 +142,11 @@ class RegionCapture(QObject):
         self._size.dragged.connect(self._move_region)
         self._coordinates = QLabel(self._bar)
         self._coordinates.setObjectName('muted')
+        self._capture = QToolButton(self._bar)
+        self._capture.setObjectName('captureRegionButton')
+        self._capture.setText('캡처')
+        self._capture.setToolTip('선택 영역 캡처')
+        self._capture.clicked.connect(self.capture_requested.emit)
         self._lock = QToolButton(self._bar)
         self._lock.setText('크기 고정')
         self._lock.setCheckable(True)
@@ -152,7 +154,8 @@ class RegionCapture(QObject):
         self._close = QToolButton(self._bar)
         self._close.setText('닫기')
         self._close.clicked.connect(self.clear)
-        for control in (self._size, self._coordinates, self._lock, self._close):
+        self._bar_actions = (self._coordinates, self._lock, self._capture, self._close)
+        for control in (self._size, *self._bar_actions):
             layout.addWidget(control)
 
         self._grip = _DragLabel(Qt.CursorShape.SizeFDiagCursor)
@@ -187,13 +190,11 @@ class RegionCapture(QObject):
             self._lock.setChecked(False)
         self.selecting = False
         self.refresh()
-        self.changed.emit()
 
     def clear(self):
         self.rect = None
         self._lock.setChecked(False)
         self.refresh()
-        self.changed.emit()
 
     def observe(self, target, *, visible=True):
         origin = target.rect if target is not None else None
@@ -253,7 +254,7 @@ class RegionCapture(QObject):
         self._outline.raise_()
         self._size.setText(f'{rect.width} × {rect.height} px')
         self._coordinates.setText('창 기준' if self._target is not None else '절대 좌표')
-        for control in (self._coordinates, self._lock, self._close):
+        for control in self._bar_actions:
             control.setVisible(not self.selecting)
 
         monitor = window_api.monitor_at(rect.x, rect.y)

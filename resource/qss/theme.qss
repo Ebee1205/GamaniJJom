@@ -192,6 +192,30 @@ QToolButton#toolbarButton:hover { background: var(--bg-tool-hover); }
 QToolButton#toolbarButton:checked { background: var(--bg-tool-checked); }
 QToolButton#toolbarButton:pressed { background: var(--bg-tool-pressed); }
 
+/* Capture region bar */
+QWidget#captureRegionBar {
+    background: var(--bg-menu);
+    border: var(--border-width) solid var(--border-menu);
+    border-radius: var(--radius-control);
+}
+QWidget#captureRegionBar QLabel, QWidget#captureRegionBar QToolButton {
+    color: var(--color-text);
+    font-size: var(--font-size-body);
+}
+QWidget#captureRegionBar QLabel#muted { color: var(--color-text-muted); }
+QWidget#captureRegionBar QToolButton {
+    background: var(--bg-transparent);
+    border: none;
+    border-radius: var(--radius-tool);
+    padding: 3px 6px;
+}
+QWidget#captureRegionBar QToolButton#captureRegionButton { background: var(--bg-primary); }
+QWidget#captureRegionBar QToolButton#captureRegionButton:hover { background: var(--bg-primary-hover); }
+QWidget#captureRegionBar QToolButton:hover { background: var(--bg-tool-hover); }
+QWidget#captureRegionBar QToolButton:checked { background: var(--bg-tool-checked); }
+QWidget#captureRegionBar QToolButton:pressed,
+QWidget#captureRegionBar QToolButton#captureRegionButton:pressed { background: var(--bg-tool-pressed); }
+
 /* ToolbarPickerGesture */
 QWidget#targetPicker {
     background: var(--bg-menu);

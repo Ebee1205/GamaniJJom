@@ -366,20 +366,14 @@ class ToolbarController(QObject):
             self._picker.stop()
         if self._region is None:
             self._region = RegionCapture(self)
-            self._region.changed.connect(self.sync)
+            self._region.capture_requested.connect(self._capture_region)
             self._region.notification.connect(self.notification.emit)
             self.update()
         self._region.start()
 
     def capture(self):
-        if self._capturing:
+        if self._capturing or (self._region is not None and self._region.selecting):
             return
-        if self._region is not None:
-            if self._region.selecting:
-                return
-            if self._region.rect is not None:
-                self._capture_region()
-                return
         primary = self.state.capture_mode == CaptureMode.PRIMARY_SCREEN
         if not primary and not self._require_attachment():
             return
@@ -388,9 +382,7 @@ class ToolbarController(QObject):
         self._capturing = True
         self._set_capture_busy(True)
         if primary:
-            if hasattr(self.window.toolbar, 'more_menu'):
-                self.window.toolbar.more_menu.hide()
-            self.render()  # Exclude our floating controls from the monitor capture.
+            self._hide_capture_controls()
         # Give the shutter/progress frame time to paint before synchronous capture.
         QTimer.singleShot(35, lambda: self._complete_capture(target))
 
@@ -402,13 +394,20 @@ class ToolbarController(QObject):
             toolbar.capture_button.setEnabled(not busy)
 
     def _capture_region(self):
+        if self._disposed or self._capturing or self._region.selecting or self._region.rect is None:
+            return
         self._capturing = True
         self._capturing_primary_screen = True  # Hide the toolbar for desktop pixel grabs.
         self._set_capture_busy(True)
-        self._region.set_suspended(True)
-        self.window.toolbar.more_menu.hide()
-        self.render()
+        self._hide_capture_controls()
         QTimer.singleShot(35, lambda: self._complete_capture(None, region=True))
+
+    def _hide_capture_controls(self):
+        if self._region is not None:
+            self._region.set_suspended(True)
+        if hasattr(self.window.toolbar, 'more_menu'):
+            self.window.toolbar.more_menu.hide()
+        self.render()
 
     def _complete_capture(self, requested_target, *, region=False):
         if self._disposed:
@@ -432,9 +431,9 @@ class ToolbarController(QObject):
             self._capturing = False
             if not self._disposed:
                 self._set_capture_busy(False)
-                if region:
-                    self._region.set_suspended(False)
                 if primary:
+                    if self._region is not None:
+                        self._region.set_suspended(False)
                     self.update()
 
     def sync(self):
@@ -462,8 +461,7 @@ class ToolbarController(QObject):
         if hasattr(toolbar, 'set_target'):
             toolbar.set_target(self.attachment.target if self.attachment is not None else None,
                                lost=self._target_was_lost,
-                               primary_screen=self.state.capture_mode == CaptureMode.PRIMARY_SCREEN,
-                               region_active=self._region is not None and self._region.rect is not None)
+                               primary_screen=self.state.capture_mode == CaptureMode.PRIMARY_SCREEN)
 
     def reveal(self):
         self.update()
