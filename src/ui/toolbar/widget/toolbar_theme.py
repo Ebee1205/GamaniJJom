@@ -33,9 +33,7 @@ class CoverState:
     dock: str | None = None
     locked: bool = False
     hovered: bool = False
-    has_target: bool = False
-    had_target: bool = False
-    primary_screen: bool = False
+    primary_screen: bool = True
     busy: bool = False
     spin_angle: int = 0
     flashing: bool = False
@@ -163,14 +161,10 @@ class ToolbarTheme(ABC):
         painter.setBrush(theme_color(fill))
         painter.setPen(QPen(theme_color('border-primary' if state.locked else 'border-button'), 1))
         painter.drawPath(self.cover_path(rect))
-        painter.setOpacity(.4 if not state.has_target and state.had_target else 1)
         icon('monitor' if state.primary_screen else 'camera').paint(
             painter, int(center.x() - 13), int(center.y() - 13), 26, 26)
-        painter.setOpacity(1)
         if state.locked:
             self.paint_badge(painter, center + QPointF(18, 18), 'lock')
-        if not state.has_target and not state.primary_screen:
-            self.paint_badge(painter, center + QPointF(-18, 18), text='!' if state.had_target else '?')
         if state.busy:
             self.paint_busy(painter, rect, state.spin_angle)
         if state.flashing:
@@ -189,15 +183,11 @@ class ToolbarTheme(ABC):
         painter.drawPolyline(points)
 
     @staticmethod
-    def paint_badge(painter, center, icon_name=None, text=None):
+    def paint_badge(painter, center, icon_name):
         painter.setPen(QPen(theme_color('border-toolbar-badge'), 1))
         painter.setBrush(theme_color('bg-toolbar-badge'))
         painter.drawEllipse(center, 8, 8)
-        if icon_name:
-            icon(icon_name).paint(painter, int(center.x() - 5), int(center.y() - 5), 10, 10)
-        else:
-            painter.setPen(theme_color('color-toolbar-badge'))
-            painter.drawText(QRectF(center.x() - 8, center.y() - 8, 16, 16), Qt.AlignmentFlag.AlignCenter, text)
+        icon(icon_name).paint(painter, int(center.x() - 5), int(center.y() - 5), 10, 10)
 
     def paint_inner(self, painter: QPainter, layout: SlotLayout, view):
         """Paint an expanded menu. `view` is the inner widget (tools, selected,

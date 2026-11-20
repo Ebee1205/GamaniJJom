@@ -71,7 +71,6 @@ class ToolbarController(QObject):
         self._wd_list_dialog = None
         self._picker = None
         self._region = None
-        self._target_was_lost = False
         self._disposed = False
         self._watch_attempted = False
         self._inspection_errors = _ErrorGate()
@@ -168,10 +167,6 @@ class ToolbarController(QObject):
 
         self._release_effect_locks(transition.effects)
         self.state = transition.state
-        if isinstance(event, tb_es.TargetClosed) and old_target is not None and self.state.target is None:
-            self._target_was_lost = True
-        elif self.state.target is not None:
-            self._target_was_lost = False
         if self.state.target != old_target:
             self._switch_target(target_info)
         self.sync()
@@ -247,7 +242,6 @@ class ToolbarController(QObject):
         if hasattr(self.window.toolbar, 'more_menu'):
             self.window.toolbar.more_menu.hide()
         self.dispatch(tb_es.TargetDisconnected(self.current_position()))
-        self._target_was_lost = False
         self.update()
         self._debug("TOOLBAR", "Disconnected; capture mode=primary_screen")
 
@@ -459,9 +453,7 @@ class ToolbarController(QObject):
             toolbar.set_dock(edge if attached else None)
         self.tracking.radial = hasattr(toolbar, 'set_dock')
         if hasattr(toolbar, 'set_target'):
-            toolbar.set_target(self.attachment.target if self.attachment is not None else None,
-                               lost=self._target_was_lost,
-                               primary_screen=self.state.capture_mode == CaptureMode.PRIMARY_SCREEN)
+            toolbar.set_target(self.attachment.target if self.attachment is not None else None)
 
     def reveal(self):
         self.update()

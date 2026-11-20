@@ -52,13 +52,10 @@ class ToolbarCoverWidget(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAutoFillBackground(False)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setAccessibleName('어플리케이션 캡처 · 드래그하여 이동 · 우클릭 도구')
 
         self._press = None
         self._moving = False
-        self._primary_screen = False
-        self._title = None
-        self._had_target = False
+        self._primary_screen = True
         self._busy = False
         self._flash_until = 0
         self._angle = 0
@@ -117,7 +114,6 @@ class ToolbarCoverWidget(QWidget):
     def cover_state(self):
         return CoverState(
             dock=self.dock, locked=self.lock_button.isChecked(), hovered=self.underMouse(),
-            has_target=self._title is not None, had_target=self._had_target,
             primary_screen=self._primary_screen, busy=self._busy, spin_angle=self._angle,
             flashing=time.monotonic() < self._flash_until)
 
@@ -176,7 +172,7 @@ class ToolbarCoverWidget(QWidget):
             if moving:
                 self.drag_finished.emit()
             elif self.theme.cover_contains(event.position()):
-                self.capture_or_select()
+                self.request_capture()
         event.accept()
 
     def cancel_drag(self):
@@ -241,13 +237,10 @@ class ToolbarCoverWidget(QWidget):
         self.menu.update()
 
     # ---- Tools (called by the inner menu) --------------------------------------------
-    def capture_or_select(self):
+    def request_capture(self):
         if self._busy:
             return
-        if self._title is None and not self._primary_screen:
-            self.pick_requested.emit()
-        else:
-            self.capture_button.click()
+        self.capture_button.click()
 
     def activate_tool(self, tool_id):
         if tool_id == 'app_select':
@@ -278,16 +271,11 @@ class ToolbarCoverWidget(QWidget):
         return self.lock_button.isChecked() if tool_id == 'lock' else False
 
     # ---- State pushed by the controller ----------------------------------------------
-    def set_target(self, target, *, lost=False, primary_screen=False):
-        self._primary_screen = primary_screen
-        self._title = target.title if target is not None else None
-        self._had_target |= target is not None or lost
+    def set_target(self, target):
+        self._primary_screen = target is None
         self.lock_button.setEnabled(target is not None)
-        text = (f'{self._title} · 클릭: 캡처' if self._title is not None
-                else '대상 창이 종료되었습니다 · 클릭하여 다시 지정' if self._had_target
-                else '클릭하여 캡처할 어플리케이션 지정')
-        if primary_screen:
-            text = '주모니터 전체 화면 캡처'
+        text = '주모니터 전체 화면 캡처' if target is None else f'{target.title} · 클릭: 캡처'
+        self.setAccessibleName(text)
         self.setToolTip(text + '\n드래그: 이동 · 우클릭: 도구')
         self.update()
 
