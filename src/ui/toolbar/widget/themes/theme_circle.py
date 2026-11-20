@@ -19,6 +19,7 @@ PRIMARY_RADIUS = 92         # beyond: child-ring area
 RING_OUTER, RING_INNER = 89, 38
 CHILD_OUTER, CHILD_INNER = 153, 96
 SLOT_ICON_RADIUS, CHILD_ICON_RADIUS = 64, 125
+CHILD_SWEEP = 360 / 8
 
 
 def layout_angles(dock=None, count=3):
@@ -116,23 +117,22 @@ class RadialLayout(SlotLayout):
         if not count:
             return []
         direction = self._slot_direction(self.submenu_parent)
-        return [(direction - 60 + (i + .5) * 120 / count) % 360 for i in range(count)]
+        return [(direction + (i - (count - 1) / 2) * CHILD_SWEEP) % 360 for i in range(count)]
 
     def child_at(self, point):
         count = len(self.child_tools)
         if not count or self._distance(point) < CHILD_INNER:
             return None
         angle = atan2(point.x() - self.center.x(), -(point.y() - self.center.y())) * 180 / pi % 360
-        half = 60 / count
+        half = CHILD_SWEEP / 2
         for index, direction in enumerate(self._child_angles()):
             if abs((angle - direction + 180) % 360 - 180) <= half:
                 return index
         return None
 
     def child_path(self, index):
-        step = 120 / len(self.child_tools)
-        start = 90 - self._child_angles()[index] + step / 2 - 1
-        return _sector(self.center, CHILD_OUTER, CHILD_INNER, start, -(step - 2))
+        start = 90 - self._child_angles()[index] + CHILD_SWEEP / 2
+        return _sector(self.center, CHILD_OUTER, CHILD_INNER, start, -CHILD_SWEEP)
 
     def child_anchor(self, index):
         angle = radians(self._child_angles()[index])
