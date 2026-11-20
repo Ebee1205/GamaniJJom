@@ -9,7 +9,7 @@ from src.models.window_enum import WindowEvent
 from src.models.toolbar_enum import CaptureMode, ToolbarEdge
 from src.models.window_schema import WindowClosedError, WindowRect
 from src.services.toolbar_state_service import reduce_toolbar
-from src.ui.rgc.region_capture import RegionCapture
+from src.ui.rgc.region_capture_controller import RegionCaptureController
 from src.ui.toolbar.toolbar_drag_gesture import ToolbarDragGesture
 from src.ui.toolbar.widget.toolbar_theme import THEME_ALIASES, available_themes
 
@@ -365,7 +365,7 @@ class ToolbarController(QObject):
         if self._picker is not None:
             self._picker.stop()
         if self._region is None:
-            self._region = RegionCapture(self)
+            self._region = RegionCaptureController(self)
             self._region.capture_requested.connect(self._capture_region)
             self._region.notification.connect(self.notification.emit)
             self.update()
