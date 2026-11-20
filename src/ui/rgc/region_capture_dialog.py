@@ -193,7 +193,7 @@ class RegionCaptureDialog(QWidget):
         _place(self._outline, rect)
         self._outline.raise_()
         self._size.setText(f'{rect.width} × {rect.height} px')
-        self._coordinates.setText('창 기준' if follows_window else '절대 좌표')
+        self._coordinates.setText('창 연결' if follows_window else '연결 해제')
         for control in self._bar_actions:
             control.setVisible(not selecting)
         self._lock.setChecked(locked)
