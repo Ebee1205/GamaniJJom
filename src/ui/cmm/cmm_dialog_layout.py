@@ -1,5 +1,6 @@
 """Shared dialog card with one title bar and replaceable body/footer widgets."""
 from PySide6.QtCore import QEvent, Qt, Signal
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QToolButton, QVBoxLayout, QWidget
 from shiboken6 import isValid
 
@@ -8,6 +9,27 @@ SURFACE_SPACING = 10
 HEADER_MIN_HEIGHT = 24
 HEADER_SPACING = 6
 CLOSE_BUTTON_SIZE = 24
+
+
+def show_dialog(dialog):
+    """Open near the owner on its current screen, within the usable desktop."""
+    if dialog.isMinimized():
+        dialog.setWindowState(dialog.windowState() & ~Qt.WindowState.WindowMinimized)
+    owner = dialog.parentWidget()
+    opening = not dialog.isVisible()
+    dialog.show()
+    if opening and owner is not None:
+        center = owner.frameGeometry().center()
+        screen = QGuiApplication.screenAt(center) or owner.screen()
+        work = screen.availableGeometry()
+        frame = dialog.frameGeometry()
+        x = max(work.x(), min(center.x() - frame.width() // 2,
+                              work.x() + work.width() - frame.width()))
+        y = max(work.y(), min(center.y() - frame.height() // 2,
+                              work.y() + work.height() - frame.height()))
+        dialog.move(x, y)
+    dialog.raise_()
+    dialog.activateWindow()
 
 
 class _Slot:

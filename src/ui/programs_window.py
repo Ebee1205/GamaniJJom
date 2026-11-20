@@ -35,13 +35,11 @@ class ProgramsWindow(QWidget):
 
     target_requested = Signal(object)    # 연결/변경할 프로그램을 선택함
     refresh_requested = Signal()         # 목록 새로고침 요청
-    quit_requested = Signal()            # 창 닫힘
     position_requested = Signal(object)  # 위치·크기 변경 요청
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.log = None
-        self.exit_confirmed = False
 
         self._setup_window()
 
@@ -220,14 +218,6 @@ class ProgramsWindow(QWidget):
         target = self.window_list.selected_window()
         if target is not None:
             signal.emit(target)
-
-    def closeEvent(self, event):
-        if self.exit_confirmed:
-            event.accept()
-            return
-        self._debug("UI", ">> Main window close requested")
-        event.ignore()
-        self.quit_requested.emit()
 
     def _debug(self, tag, message):
         """로거가 설정되어 있을 때만 디버그 로그를 남긴다."""

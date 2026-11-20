@@ -9,6 +9,7 @@ from src.models.window_enum import WindowEvent
 from src.models.toolbar_enum import CaptureMode, ToolbarEdge
 from src.models.window_schema import WindowClosedError, WindowRect
 from src.services.toolbar_state_service import reduce_toolbar
+from src.ui.cmm.cmm_dialog_layout import show_dialog
 from src.ui.rgc.region_capture_controller import RegionCaptureController
 from src.ui.toolbar.toolbar_drag_gesture import ToolbarDragGesture
 from src.ui.toolbar.widget.toolbar_theme import THEME_ALIASES, available_themes
@@ -255,14 +256,12 @@ class ToolbarController(QObject):
         if hasattr(self.window.toolbar, 'more_menu'):
             self.window.toolbar.more_menu.hide()
         if self._wd_list_dialog is None:
-            from ui.wd_list.wd_list_dialog import WdListDialog
-            self._wd_list_dialog = WdListDialog(log=self.log)
+            from src.ui.wd_list.wd_list_dialog import WdListDialog
+            self._wd_list_dialog = WdListDialog(self.window, log=self.log)
             self._wd_list_dialog.refresh_requested.connect(self._refresh_window_list)
             self._wd_list_dialog.selection_requested.connect(self._confirm_window_list)
         self._refresh_window_list()
-        self._wd_list_dialog.show()
-        self._wd_list_dialog.raise_()
-        self._wd_list_dialog.activateWindow()
+        show_dialog(self._wd_list_dialog)
         self._wd_list_dialog.search.setFocus()
         self._debug("TOOLBAR", "Window list dialog opened")
 

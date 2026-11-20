@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from src.ui.cmm.cmm_dialog_layout import CmmDialogLayout
+from src.ui.cmm.cmm_dialog_layout import CmmDialogLayout, show_dialog
 
 DIALOG_WIDTH = 300
 
@@ -83,7 +83,7 @@ class CmmDialog(QDialog):
     @is_active.setter
     def is_active(self, active: bool):
         if active:
-            self.show()
+            show_dialog(self)
         else:
             self.on_confirm = None
             super().reject()
@@ -112,7 +112,7 @@ class CmmDialog(QDialog):
 
         self.adjustSize()
         self.setWindowModality(Qt.WindowModality.ApplicationModal)
-        self.show()
+        show_dialog(self)
         (self.confirm_button if self.is_one_btn else self.cancel_button).setFocus()
         self._debug(f">> Common dialog opened one_button={self.is_one_btn}")
 

@@ -2,6 +2,7 @@
 from PySide6.QtCore import QObject, QTimer, Qt, Signal
 
 from src.services.window_service import _validate_rect
+from src.ui.cmm.cmm_dialog_layout import show_dialog
 from src.ui.wd_size.wd_size_dialog import WdSizeDialog
 from src.ui.programs_window import ProgramsWindow
 
@@ -9,16 +10,15 @@ from src.ui.programs_window import ProgramsWindow
 class WdSizeController(QObject):
     target_requested = Signal(object)
     geometry_changed = Signal(object)
-    quit_requested = Signal()
     notification = Signal(str)
 
-    def __init__(self, windows, attachments, parent=None):
+    def __init__(self, windows, attachments, parent=None, *, dialog_parent=None):
         super().__init__(parent)
         self.log = parent.ctx.log if parent is not None else None
         self.windows = windows
         self.attachments = attachments
         self.window = ProgramsWindow()
-        self.position = WdSizeDialog()
+        self.position = WdSizeDialog(dialog_parent)
         self.window.log = self.log
         self.position.log = self.log
         self.window.window_list.log = self.log
@@ -30,7 +30,6 @@ class WdSizeController(QObject):
         self.window.position_requested.connect(self.show_position)
         self.window.target_requested.connect(self.target_requested.emit)
         self.window.refresh_requested.connect(self.refresh)
-        self.window.quit_requested.connect(self.quit_requested.emit)
         self.position.apply_requested.connect(self.apply_position)
         self.refresh_timer = QTimer(self)
         self.refresh_timer.setInterval(1000)
@@ -81,16 +80,11 @@ class WdSizeController(QObject):
                 self.log.debug("SETTINGS", f"<< UI operation ended error_type={type(error).__name__}")
             self.window.status.setText(str(error))
 
-    def show_picker(self):
-        if self.log is not None:
-            self.log.debug("SETTINGS", f">> Target picker requested")
-        self.show()
-
     def show_position(self, target):
         if self.log is not None:
             self.log.debug("SETTINGS", f">> Position dialog requested hwnd={target.handle_text} pid={target.pid}")
         if self.pending is not None:
-            self.open(self.position)
+            show_dialog(self.position)
             self.position.status.setText("이전 변경 결과를 확인하는 중입니다.")
             return
         try:
@@ -101,7 +95,7 @@ class WdSizeController(QObject):
             self.notification.emit(str(error))
             return
         self.position.set_target(current)
-        self.open(self.position)
+        show_dialog(self.position)
 
     def apply_position(self, rect):
         if self.log is not None:

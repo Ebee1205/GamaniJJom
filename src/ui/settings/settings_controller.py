@@ -2,6 +2,7 @@
 from PySide6.QtCore import QObject, Signal
 
 from src.services.image_save_service import ImageSaveService
+from src.ui.cmm.cmm_dialog_layout import show_dialog
 from src.ui.settings.setting_dialog import SettingDialog
 
 
@@ -24,9 +25,7 @@ class SettingsController(QObject):
         self._debug(">> Settings dialog requested")
         if not self.window.isVisible():
             self.load_config()
-            self.window.show()
-        self.window.raise_()
-        self.window.activateWindow()
+        show_dialog(self.window)
 
     def load_config(self) -> None:
         try:

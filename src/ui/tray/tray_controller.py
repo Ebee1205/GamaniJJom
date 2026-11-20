@@ -28,22 +28,22 @@ class TrayController(QObject):
         self.tracking = tracking
         self.controllers = {}
         self.toolbar_controller = None
-        self.programs = WdSizeController(windows, attachments, self)
-        self.settings = SettingsController(SettingDialog(self.programs.window), ctx, self)
+        self._toolbar_window = ToolbarWidget(theme=ctx.cfg.theme)
+        self.programs = WdSizeController(windows, attachments, self, dialog_parent=self._toolbar_window)
+        self.settings = SettingsController(SettingDialog(self._toolbar_window), ctx, self)
         self.settings.config_changed.connect(self.apply_settings)
         self.settings.notification.connect(self.notify)
         self.apply_settings()
-        self.common_dlg = CmmDialog(self.programs.window, self.log)
+        self.common_dlg = CmmDialog(self._toolbar_window, self.log)
         self.common_dlg.rejected.connect(self.cancel_quit)
         self.programs.target_requested.connect(self.attach)
         self.programs.geometry_changed.connect(self.on_geometry_changed)
         self.programs.notification.connect(self.notify)
-        self.programs.quit_requested.connect(self.request_quit)
         self.tray = TrayWidget(self)
         self.tray.toolbar_requested.connect(lambda: self.ensure_toolbar().recover_toolbar())
         self.tray.toolbar_mode_requested.connect(self.set_toolbar_mode)
         self.tray.attach_requested.connect(self.show_picker)
-        self.tray.programs_requested.connect(self.programs.show)
+        self.tray.programs_requested.connect(self.show_picker)
         self.tray.settings_requested.connect(self.settings.show)
         self.tray.connection_requested.connect(self.show_connection)
         self.tray.quit_requested.connect(self.request_quit)
@@ -60,11 +60,12 @@ class TrayController(QObject):
         if self.log is not None:
             self.log.debug("TRAY", f">> Tray startup requested")
         if not QSystemTrayIcon.isSystemTrayAvailable():
-            QMessageBox.critical(None, "GamaniJJom", "시스템 트레이를 사용할 수 없어 종료합니다.")
+            QMessageBox.critical(self._toolbar_window, "GamaniJJom", "시스템 트레이를 사용할 수 없어 종료합니다.")
             return False
         self.tray.show()
-        self.show_picker()
-        self.ensure_toolbar().initialize_startup(int(self.programs.window.winId()))
+        self.ensure_toolbar().initialize_startup()
+        if self.ctx.cfg.devMode:
+            self.programs.show()
         # Reapply presentation once the initial Qt show/layout events settle.
         # This only reveals the current state, so it cannot reset a selection.
         QTimer.singleShot(0, self.reveal_startup_toolbar)
@@ -81,16 +82,20 @@ class TrayController(QObject):
         if config is None:
             return
         self.capture.configure(config.save)
+        if not config.devMode:
+            self.programs.window.hide()
         if self.toolbar_controller is not None:
             self.toolbar_controller.switch_renderer(config.theme)
         if self.log is not None:
             self.log.debug("SETTINGS", "!! Runtime settings applied")
 
     def notify(self, message, *, capture_completed=False):
-        self.programs.window.status.setText(message)
         config = getattr(self.ctx, "cfg", None)
+        if config is not None and config.devMode:
+            self.programs.window.status.setText(message)
         toast_enabled = not capture_completed or config is None or config.save.notification_enabled
-        self.log.debug("UI", f"<< Notification processed length={len(message)} toast={toast_enabled}")
+        if self.log is not None:
+            self.log.debug("UI", f"<< Notification processed length={len(message)} toast={toast_enabled}")
         if toast_enabled:
             self.tray.showMessage("GamaniJJom", message)
 
@@ -98,11 +103,14 @@ class TrayController(QObject):
         self.notify(message, capture_completed=True)
 
     def refresh_views(self):
-        self.programs.refresh()
+        if self.ctx.cfg.devMode:
+            self.programs.refresh()
         self.tray.set_connections(list(self.attachments.attachments.values()))
         self.update_debug_info()
 
     def update_debug_info(self):
+        if not self.ctx.cfg.devMode:
+            return
         toolbar = self.toolbar_controller
         attachments = self.attachments.attachments
         lines = [
@@ -165,7 +173,10 @@ class TrayController(QObject):
     def show_picker(self):
         if self.log is not None:
             self.log.debug("TRAY", f">> Target selection requested")
-        self.programs.show_picker()
+        if self.ctx.cfg.devMode:
+            self.programs.show()
+        else:
+            self.ensure_toolbar().open_window_list()
 
     def set_toolbar_mode(self, mode):
         try:
@@ -178,8 +189,7 @@ class TrayController(QObject):
 
     def ensure_toolbar(self):
         if self.toolbar_controller is None:
-            window = ToolbarWidget(theme=self.ctx.cfg.theme)
-            controller = ToolbarController(window, None, self.locks, self.capture,
+            controller = ToolbarController(self._toolbar_window, None, self.locks, self.capture,
                                            self.tracking, self.windows, self)
             controller.notification.connect(self.notify)
             controller.capture_completed.connect(self.notify_capture)
@@ -211,7 +221,7 @@ class TrayController(QObject):
         except (ValueError, OSError) as error:
             self.notify(str(error))
             return
-        if controller.attachment is not None:
+        if self.ctx.cfg.devMode and controller.attachment is not None:
             self.programs.window.window_list.select_identity(controller.attachment.target.identity)
         self.refresh_views()
 
@@ -264,7 +274,6 @@ class TrayController(QObject):
             return
         self._confirming_quit = False
         self._quit_confirmed = True
-        self.programs.window.exit_confirmed = True
         if self.log is not None:
             self.log.debug("UI", "<< Exit confirmed")
         self.shutdown()
@@ -280,9 +289,9 @@ class TrayController(QObject):
         self.timer.stop()
         self.tray.hide()
         self.tray.menu.hide()
+        self.settings.dispose()
+        self.programs.shutdown()
         if self.toolbar_controller is not None:
             self.toolbar_controller.dispose()
         self.controllers.clear()
         self.attachments.attachments.clear()
-        self.settings.dispose()
-        self.programs.shutdown()

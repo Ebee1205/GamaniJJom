@@ -8,7 +8,7 @@ All rights reserved.
 import logging
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from src.modules import logger
 from src.modules.config_handler import ConfigHandler
@@ -37,6 +37,9 @@ class SaveConfig(BaseModel):
     copy_to_clipboard: bool = True
     filename: FilenameConfig = Field(default_factory=FilenameConfig)
 
+class DevModeConfig(BaseModel):
+    devMode: bool = False
+
 
 ToolbarThemeName = Literal["circle", "square"]
 
@@ -47,6 +50,14 @@ class AppConfig(BaseModel):
     logger: LoggerConfig
     save: SaveConfig
     theme: ToolbarThemeName = "square"
+    devMode: bool = False
+
+    @field_validator("devMode", mode="before")
+    @classmethod
+    def read_dev_mode(cls, value):
+        if isinstance(value, (dict, DevModeConfig)):
+            return DevModeConfig.model_validate(value).devMode
+        return value
 
 
 class AppContext:
