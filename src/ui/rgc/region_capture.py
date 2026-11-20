@@ -1,16 +1,17 @@
 """Select and adjust a capture region in native desktop pixels."""
 from dataclasses import replace
 
-from PySide6.QtCore import QObject, Qt, Signal
-from PySide6.QtGui import QColor, QPainter
+from PySide6.QtCore import QObject, QRectF, Qt, Signal
+from PySide6.QtGui import QBrush, QColor, QLinearGradient, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QToolButton, QWidget
 
 from src.adapters.windows import window_api
 from src.models.window_schema import WindowRect
 from src.ui.cmm.cmm_window_overlay import CmmWindowOverlay
-from src.ui.resources import theme_token
+from src.ui.resources import theme_color, theme_token
 
 MIN_SIZE = 8
+SELECTION_DIM = QColor(0, 0, 0, 100)
 FLOATING = (Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.NoDropShadowWindowHint)
 
@@ -24,6 +25,26 @@ def _place(widget, rect):
     window_api.set_rect(int(widget.winId()), rect)
 
 
+class _RegionOutline(CmmWindowOverlay):
+    """Draw the capture border on the shared click-through overlay window."""
+
+    def paintEvent(self, event):
+        rect = QRectF(self.rect()).adjusted(1.5, 1.5, -1.5, -1.5)
+        if rect.isEmpty():
+            return
+        highlight = theme_color('border-window-highlight')
+        soft = QColor(highlight)
+        soft.setAlpha(145)
+        gradient = QLinearGradient(rect.topLeft(), rect.bottomRight())
+        gradient.setColorAt(0.0, highlight)
+        gradient.setColorAt(1.0, soft)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QPen(QBrush(gradient), 3))
+        painter.drawRoundedRect(rect, 5, 5)
+
+
 class _SelectionSurface(QWidget):
     preview = Signal(object)
     finished = Signal(object)
@@ -34,27 +55,41 @@ class _SelectionSurface(QWidget):
         self.setCursor(Qt.CursorShape.CrossCursor)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._start = None
+        self._desktop_rect = None
+        self._selection = None
 
     def begin(self):
         monitors = [monitor.bounds for monitor in window_api.available_monitors()]
         left, top = min(r.x for r in monitors), min(r.y for r in monitors)
         right = max(r.x + r.width for r in monitors)
         bottom = max(r.y + r.height for r in monitors)
-        _place(self, WindowRect(left, top, right - left, bottom - top))
+        self._desktop_rect = WindowRect(left, top, right - left, bottom - top)
+        _place(self, self._desktop_rect)
         self.activateWindow()
         self.setFocus()
         self.grabKeyboard()
 
     def end(self):
         self._start = None
+        self._selection = None
         if self.keyboardGrabber() is self:
             self.releaseKeyboard()
         self.hide()
 
     def paintEvent(self, event):
-        # A translucent surface catches clicks across the desktop during selection.
+        shade = QPainterPath()
+        shade.addRect(QRectF(self.rect()))
+        if self._selection is not None:
+            # The drag uses native desktop pixels while painting uses local Qt coordinates.
+            selection, desktop = self._selection, self._desktop_rect
+            scale = self.devicePixelRatioF()
+            cutout = QRectF((selection.x - desktop.x) / scale, (selection.y - desktop.y) / scale,
+                            selection.width / scale, selection.height / scale)
+            shade.addRect(cutout)  # The default odd-even fill leaves this area clear.
         painter = QPainter(self)
-        painter.fillRect(event.rect(), QColor(0, 0, 0, 28))
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+        painter.fillRect(event.rect(), Qt.GlobalColor.transparent)
+        painter.fillPath(shade, SELECTION_DIM)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -69,15 +104,17 @@ class _SelectionSurface(QWidget):
 
     def mouseMoveEvent(self, event):
         if self._start is not None:
-            self._report_drag(self.preview)
+            self._selection = self._selected_rect()
+            self.update()
+            self.preview.emit(self._selection)
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton and self._start is not None:
-            self._report_drag(self.finished)
+            self.finished.emit(self._selected_rect())
 
-    def _report_drag(self, signal):
+    def _selected_rect(self):
         rect = self._drag_rect()
-        signal.emit(rect if min(rect.width, rect.height) >= MIN_SIZE else None)
+        return rect if min(rect.width, rect.height) >= MIN_SIZE else None
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:
@@ -127,8 +164,7 @@ class RegionCapture(QObject):
         self._surface.preview.connect(self._present)
         self._surface.finished.connect(self._finish_selection)
 
-        self._outline = CmmWindowOverlay()
-        self._outline.set_selection(True)
+        self._outline = _RegionOutline()
         flags = FLOATING | Qt.WindowType.WindowDoesNotAcceptFocus
         self._bar = QWidget(None, flags)
         self._bar.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
