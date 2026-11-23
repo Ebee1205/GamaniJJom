@@ -36,6 +36,7 @@ class WindowExtendedStyle(IntFlag):
 
 
 class DwmWindowAttribute(IntEnum):
+    EXTENDED_FRAME_BOUNDS = 9
     CLOAKED = 14
 
 

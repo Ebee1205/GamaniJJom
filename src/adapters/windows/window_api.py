@@ -236,15 +236,34 @@ def _read_title(hwnd: int) -> str:
     return buffer.value
 
 
+def _visible_rect(hwnd: int) -> wt.RECT:
+    """Visible frame excluding the DWM drop shadow; falls back to GetWindowRect."""
+    rect = wt.RECT()
+    if _get_dwm_attribute(hwnd, window_enum.DwmWindowAttribute.EXTENDED_FRAME_BOUNDS,
+                          ctypes.byref(rect), ctypes.sizeof(rect)) == 0:
+        return rect
+    if not _get_window_rect(hwnd, ctypes.byref(rect)):
+        raise _last_error()
+    return rect
+
+
+def _shadow_inset(hwnd: int) -> tuple[int, int, int, int]:
+    """Shadow thickness (left, top, right, bottom) between the outer and visible rects."""
+    outer = wt.RECT()
+    if not _get_window_rect(hwnd, ctypes.byref(outer)):
+        raise _last_error()
+    visible = _visible_rect(hwnd)
+    return (visible.left - outer.left, visible.top - outer.top,
+            outer.right - visible.right, outer.bottom - visible.bottom)
+
+
 def read_window(hwnd: int) -> window_schema.WindowInfo:
     if not _is_window(hwnd):
         raise window_schema.WindowClosedError("대상 창이 종료되었습니다. 목록을 새로고침하세요.")
     pid = wt.DWORD()
     if not _get_process_id(hwnd, ctypes.byref(pid)):
         raise _last_error()
-    rect = wt.RECT()
-    if not _get_window_rect(hwnd, ctypes.byref(rect)):
-        raise _last_error()
+    rect = _visible_rect(hwnd)
     title = _read_title(hwnd)
     confirmed_pid = wt.DWORD()
     if not _is_window(hwnd):
@@ -261,8 +280,11 @@ def read_window(hwnd: int) -> window_schema.WindowInfo:
 def set_rect(hwnd: int, rect: window_schema.WindowRect) -> None:
     if _is_iconic(hwnd) or _is_zoomed(hwnd):
         raise ValueError("최소화·최대화된 창은 일반 창으로 복원한 뒤 적용하세요.")
+    # rect is in visible-frame coordinates; SetWindowPos takes the outer rect including the shadow.
+    left, top, right, bottom = _shadow_inset(hwnd)
     if not _set_window_pos(
-        hwnd, None, rect.x, rect.y, rect.width, rect.height, int(MOVE_FLAGS)
+        hwnd, None, rect.x - left, rect.y - top,
+        rect.width + left + right, rect.height + top + bottom, int(MOVE_FLAGS)
     ):
         raise _last_error()
 
@@ -277,8 +299,9 @@ def lock_size(hwnd: int, rect: window_schema.WindowRect) -> None:
         | window_enum.SetWindowPosFlag.NOACTIVATE
         | window_enum.SetWindowPosFlag.ASYNCWINDOWPOS
     )
+    left, top, right, bottom = _shadow_inset(hwnd)
     if not _set_window_pos(
-        hwnd, None, 0, 0, rect.width, rect.height, int(lock_flags)
+        hwnd, None, 0, 0, rect.width + left + right, rect.height + top + bottom, int(lock_flags)
     ):
         raise _last_error()
 
