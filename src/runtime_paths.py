@@ -33,7 +33,7 @@ def prepare_default_config() -> None:
     target = default_config_path()
     if not is_frozen() or target.exists():
         return
-    template = bundle_root() / 'src' / 'config' / 'gamani-jjom.cfg.json'
+    template = bundle_root() / 'src' / 'config' / 'gamani-jjom.prod.cfg.json'
     settings = json.loads(template.read_text(encoding='utf-8-sig'))
     target.parent.mkdir(parents=True, exist_ok=True)
     # Exclusive creation also protects preferences when two instances start.

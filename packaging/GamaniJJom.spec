@@ -8,7 +8,7 @@ a = Analysis(
     pathex=[str(root)],
     binaries=[],
     datas=[(str(root / 'resource'), 'resource'),
-           (str(root / 'src' / 'config' / 'gamani-jjom.cfg.json'), 'src/config')],
+           (str(root / 'src' / 'config' / 'gamani-jjom.prod.cfg.json'), 'src/config')],
     hiddenimports=collect_submodules('src'),
     hookspath=[],
     runtime_hooks=[str(root / 'packaging' / 'windowed_runtime.py')],
