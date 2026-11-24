@@ -3,6 +3,8 @@ from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
+from src.ui.cmm.cmm_window_flags import PICKER_WINDOW_FLAGS
+
 class ToolbarPickerGesture(QWidget):
     selected = Signal(object)
     notification = Signal(str)
@@ -10,8 +12,7 @@ class ToolbarPickerGesture(QWidget):
     def __init__(self, windows, tracking, toolbar_widget):
         # A picker is a modal interaction, not a popup menu. Windows can close
         # a new Qt.Popup when the previous radial popup finishes deactivating.
-        super().__init__(None, Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint
-                         | Qt.WindowType.WindowStaysOnTopHint)
+        super().__init__(None, PICKER_WINDOW_FLAGS)
         self.windows, self.tracking, self.toolbar_widget = windows, tracking, toolbar_widget
         self.log = getattr(toolbar_widget, "log", None)
         self._active = False

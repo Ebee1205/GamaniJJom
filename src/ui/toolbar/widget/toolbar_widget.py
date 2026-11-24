@@ -13,6 +13,7 @@ or injected from QSS (theme.qss), no code change needed:
 from PySide6.QtCore import Property, Qt
 from PySide6.QtWidgets import QHBoxLayout, QWidget
 
+from src.ui.cmm.cmm_window_flags import TOOLBAR_WINDOW_FLAGS
 from src.ui.cmm.cmm_window_overlay import CmmWindowOverlay
 from src.ui.toolbar.widget import themes  # noqa: F401  (registers the built-in themes)
 from src.ui.toolbar.widget.toolbar_cover_widget import ToolbarCoverWidget
@@ -23,9 +24,7 @@ DEFAULT_THEME = 'square'
 
 class ToolbarWidget(QWidget):
     def __init__(self, title: str = '', parent=None, *, theme=None, mode=None):
-        flags = (Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint
-                 | Qt.WindowType.WindowDoesNotAcceptFocus)
-        super().__init__(parent, flags)
+        super().__init__(parent, TOOLBAR_WINDOW_FLAGS)
         self.log = None
         self._closing = False
         self._candidate = None

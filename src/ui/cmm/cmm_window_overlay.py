@@ -3,15 +3,13 @@ from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
+from src.ui.cmm.cmm_window_flags import OVERLAY_WINDOW_FLAGS
 from src.ui.resources import theme_color
 
 
 class CmmWindowOverlay(QWidget):
     def __init__(self):
-        flags = (Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint
-                 | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.WindowDoesNotAcceptFocus
-                 | Qt.WindowType.WindowTransparentForInput | Qt.WindowType.NoDropShadowWindowHint)
-        super().__init__(None, flags)
+        super().__init__(None, OVERLAY_WINDOW_FLAGS)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)

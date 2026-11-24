@@ -5,13 +5,12 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QToolButton, QWidg
 
 from src.adapters.windows import window_api
 from src.models.window_schema import WindowRect
+from src.ui.cmm.cmm_window_flags import REGION_GRIP_WINDOW_FLAGS, REGION_WINDOW_FLAGS
 from src.ui.cmm.cmm_window_overlay import CmmWindowOverlay
 from src.ui.resources import icon, theme_color, theme_token
 
 MIN_SIZE = 8
 SELECTION_DIM = QColor(0, 0, 0, 100)
-FLOATING = (Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.NoDropShadowWindowHint)
 
 
 def _place(widget, rect):
@@ -77,7 +76,7 @@ class RegionCaptureDialog(QWidget):
     size_requested = Signal(int, int)
 
     def __init__(self):
-        super().__init__(None, FLOATING)
+        super().__init__(None, REGION_WINDOW_FLAGS)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setCursor(Qt.CursorShape.CrossCursor)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -86,7 +85,7 @@ class RegionCaptureDialog(QWidget):
         self._selection = None
         self._shown_size = None
         self._outline = _RegionOutline()
-        self._bar = QWidget(None, FLOATING)
+        self._bar = QWidget(None, REGION_WINDOW_FLAGS)
         self._bar.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self._bar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
         self._bar.setObjectName('captureRegionBar')
@@ -142,7 +141,7 @@ class RegionCaptureDialog(QWidget):
             layout.addWidget(control)
 
         self._grip = _DragLabel(Qt.CursorShape.SizeFDiagCursor)
-        self._grip.setWindowFlags(FLOATING | Qt.WindowType.WindowDoesNotAcceptFocus)
+        self._grip.setWindowFlags(REGION_GRIP_WINDOW_FLAGS)
         self._grip.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self._grip.setStyleSheet(
             f"background: {theme_token('border-window-highlight')}; border-radius: 2px;"

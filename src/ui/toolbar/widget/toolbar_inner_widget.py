@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QWidget
 from shiboken6 import isValid
 
 from src.models.toolbar_tool_schema import TOOLBAR_TOOLS
+from src.ui.cmm.cmm_window_flags import RADIAL_MENU_WINDOW_FLAGS
 from src.ui.toolbar.widget.themes.theme_circle import layout_angles, slot_at  # noqa: F401  (kept for existing imports)
 from src.ui.toolbar.widget.toolbar_theme import ZONE_DEAD, ZONE_PRIMARY
 
@@ -22,8 +23,7 @@ class ToolbarInnerWidget(QWidget):
     closed = Signal()
 
     def __init__(self, toolbar):
-        super().__init__(None, Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint
-                         | Qt.WindowType.NoDropShadowWindowHint | Qt.WindowType.WindowStaysOnTopHint)
+        super().__init__(None, RADIAL_MENU_WINDOW_FLAGS)
         self.toolbar = toolbar
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setMouseTracking(True)
