@@ -247,6 +247,21 @@ def _visible_rect(hwnd: int) -> wt.RECT:
     return rect
 
 
+def capture_bounds(hwnd: int) -> tuple[window_schema.WindowRect, window_schema.WindowRect]:
+    """Return the outer PrintWindow bounds and the visible DWM frame in screen pixels."""
+    outer = wt.RECT()
+    if not _get_window_rect(hwnd, ctypes.byref(outer)):
+        raise _last_error()
+    visible = _visible_rect(hwnd)
+
+    def as_rect(rect):
+        return window_schema.WindowRect(
+            rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top
+        )
+
+    return as_rect(outer), as_rect(visible)
+
+
 def _shadow_inset(hwnd: int) -> tuple[int, int, int, int]:
     """Shadow thickness (left, top, right, bottom) between the outer and visible rects."""
     outer = wt.RECT()

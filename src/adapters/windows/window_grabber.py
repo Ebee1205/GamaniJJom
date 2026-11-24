@@ -4,13 +4,16 @@ import ctypes
 import win32con
 import win32gui
 import win32ui
-from PySide6.QtGui import QGuiApplication, QImage, QPixmap
+from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter, QPixmap
 
 from src.adapters.windows import window_api
 from src.models.window_schema import WindowRect
 
 CAPTUREBLT = 0x40000000  # Include layered windows in a desktop BitBlt.
 PW_RENDERFULLCONTENT = 0x00000002  # Win8.1+ : DWM/GPU 렌더링 창도 캡처
+GWL_EXSTYLE = -20
+WS_EX_LAYERED = 0x00080000
+LWA_ALPHA = 0x00000002
 
 
 class WindowGrabber:
@@ -28,8 +31,12 @@ class WindowGrabber:
 
     def grab(self, hwnd: int) -> QPixmap:
         self._restore_if_minimized(hwnd)
-        width, height = self._window_size(hwnd)
-        return self._print_window(hwnd, width, height)
+        outer, visible = window_api.capture_bounds(hwnd)
+        if outer.width <= 0 or outer.height <= 0:
+            raise ValueError("창 크기가 올바르지 않습니다.")
+        pixmap = self._print_window(hwnd, outer.width, outer.height)
+        pixmap = self._crop_visible_frame(pixmap, outer, visible)
+        return self._apply_opacity(pixmap, self._window_opacity(hwnd))
 
     @staticmethod
     def grab_region(rect: WindowRect) -> QPixmap:
@@ -82,12 +89,43 @@ class WindowGrabber:
             win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
 
     @staticmethod
-    def _window_size(hwnd: int) -> tuple[int, int]:
-        left, top, right, bottom = win32gui.GetWindowRect(hwnd)
-        width, height = right - left, bottom - top
-        if width <= 0 or height <= 0:
-            raise ValueError("창 크기가 올바르지 않습니다.")
-        return width, height
+    def _crop_visible_frame(pixmap: QPixmap, outer: WindowRect,
+                            visible: WindowRect) -> QPixmap:
+        """Exclude the area outside DWMWA_EXTENDED_FRAME_BOUNDS."""
+        left = max(0, visible.x - outer.x)
+        top = max(0, visible.y - outer.y)
+        right = min(pixmap.width(), visible.x + visible.width - outer.x)
+        bottom = min(pixmap.height(), visible.y + visible.height - outer.y)
+        if right <= left or bottom <= top:
+            raise OSError("캡처할 창의 표시 영역이 올바르지 않습니다.")
+        if (left, top, right, bottom) == (0, 0, pixmap.width(), pixmap.height()):
+            return pixmap
+        return pixmap.copy(left, top, right - left, bottom - top)
+
+    @staticmethod
+    def _window_opacity(hwnd: int) -> int:
+        """Window alpha 0-255 set via SetLayeredWindowAttributes; 255 when not applicable."""
+        if not win32gui.GetWindowLong(hwnd, GWL_EXSTYLE) & WS_EX_LAYERED:
+            return 255
+        alpha = ctypes.c_ubyte()
+        flags = ctypes.c_ulong()
+        if not ctypes.windll.user32.GetLayeredWindowAttributes(
+            hwnd, None, ctypes.byref(alpha), ctypes.byref(flags)
+        ):
+            return 255
+        return alpha.value if flags.value & LWA_ALPHA else 255
+
+    @staticmethod
+    def _apply_opacity(pixmap: QPixmap, alpha: int) -> QPixmap:
+        """Multiply the pixmap's alpha channel by the window opacity."""
+        if alpha >= 255:
+            return pixmap
+        image = pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
+        painter = QPainter(image)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
+        painter.fillRect(image.rect(), QColor(0, 0, 0, alpha))
+        painter.end()
+        return QPixmap.fromImage(image)
 
     @staticmethod
     def _print_window(hwnd: int, width: int, height: int) -> QPixmap:
