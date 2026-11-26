@@ -24,6 +24,25 @@ def cursor_position() -> tuple[int, int]:
     return point.x, point.y
 
 
+def set_taskbar_visible(hwnd: int, enabled: bool) -> None:
+    """Register the existing toolbar HWND with the Shell, without changing its style."""
+    import pythoncom
+    from win32com.shell import shell
+
+    try:
+        taskbar = pythoncom.CoCreateInstance(
+            shell.CLSID_TaskbarList, None, pythoncom.CLSCTX_INPROC_SERVER,
+            shell.IID_ITaskbarList,
+        )
+        taskbar.HrInit()
+        if enabled:
+            taskbar.AddTab(hwnd)
+        else:
+            taskbar.DeleteTab(hwnd)
+    except pythoncom.com_error as error:
+        raise OSError(f"Taskbar registration failed: {error}") from error
+
+
 def _position_error(operation, hwnd, after=None):
     code = ctypes.get_last_error()
     context = f"{operation} hwnd={hwnd:#x} after={after}"
@@ -44,7 +63,8 @@ def set_toolbar_order(hwnd: int, *, topmost: bool, target: int | None = None) ->
     insertion handle. False means relative ordering was restricted, not a move
     failure. Never promote a background target here.
     """
-    flags = 0x0001 | 0x0002 | 0x0010 | 0x0200  # NOSIZE, NOMOVE, NOACTIVATE, NOOWNERZORDER
+    # Preserve native owner/owned-window ordering when moving the toolbar.
+    flags = 0x0001 | 0x0002 | 0x0010  # NOSIZE, NOMOVE, NOACTIVATE
 
     def place(after, operation):
         ctypes.set_last_error(0)

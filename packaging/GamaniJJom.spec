@@ -24,6 +24,6 @@ exe = EXE(
     upx=False,
     console=False,
     disable_windowed_traceback=False,
-    icon='NONE',
+    icon=str(root / 'resource' / 'app.ico'),
     uac_admin=False,
 )

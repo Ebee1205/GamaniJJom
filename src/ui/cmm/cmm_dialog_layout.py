@@ -17,6 +17,13 @@ def show_dialog(dialog):
         dialog.setWindowState(dialog.windowState() & ~Qt.WindowState.WindowMinimized)
     owner = dialog.parentWidget()
     opening = not dialog.isVisible()
+    if opening and owner is not None:
+        dialog.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint)
+        # Set the native transient owner before Qt shows the dialog.
+        owner_window = owner.window()
+        owner_window.winId()
+        dialog.winId()
+        dialog.windowHandle().setTransientParent(owner_window.windowHandle())
     dialog.show()
     if opening and owner is not None:
         center = owner.frameGeometry().center()

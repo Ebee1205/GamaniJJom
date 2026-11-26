@@ -29,6 +29,7 @@ class TrayController(QObject):
         self.controllers = {}
         self.toolbar_controller = None
         self._toolbar_window = ToolbarWidget(theme=ctx.cfg.theme)
+        self._toolbar_window.set_taskbar_enabled(True)
         self.programs = WdSizeController(windows, attachments, self, dialog_parent=self._toolbar_window)
         self.settings = SettingsController(SettingDialog(self._toolbar_window), ctx, self)
         self.settings.config_changed.connect(self.apply_settings)

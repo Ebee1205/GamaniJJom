@@ -6,6 +6,7 @@ import re
 from PySide6.QtGui import QColor, QIcon
 
 RESOURCE_ROOT = Path(__file__).resolve().parents[2] / "resource"
+APP_ICON_PATH = RESOURCE_ROOT / "app.ico"
 _TOKEN_BLOCK = re.compile(r":root\s*\{([^{}]*)\}")
 _TOKEN_DECLARATION = re.compile(r"--([a-z][a-z0-9-]*)\s*:\s*([^;{}]+);", re.ASCII)
 _TOKEN_REFERENCE = re.compile(r"var\(\s*--([a-z][a-z0-9-]*)\s*\)", re.ASCII)
@@ -13,6 +14,10 @@ _TOKEN_REFERENCE = re.compile(r"var\(\s*--([a-z][a-z0-9-]*)\s*\)", re.ASCII)
 
 def icon(name: str) -> QIcon:
     return QIcon(str(RESOURCE_ROOT / "icons" / f"icon_{name}.svg"))
+
+
+def app_icon() -> QIcon:
+    return QIcon(str(APP_ICON_PATH))
 
 
 def apply_theme(app) -> None:

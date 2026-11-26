@@ -3,7 +3,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtGui import QActionGroup
 from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
-from src.ui.resources import icon
+from src.ui.resources import app_icon
 
 
 class TrayWidget(QSystemTrayIcon):
@@ -16,7 +16,7 @@ class TrayWidget(QSystemTrayIcon):
     quit_requested = Signal()
 
     def __init__(self, parent=None):
-        super().__init__(icon("unlock"), parent)
+        super().__init__(app_icon(), parent)
         self.log = parent.ctx.log if parent is not None else None
         self.setToolTip("GamaniJJom — 창 컨트롤러")
         self.menu = QMenu()

@@ -8,6 +8,7 @@ All rights reserved.
 import argparse
 import os
 import signal
+import subprocess
 import sys
 import traceback
 from enum import IntEnum
@@ -45,11 +46,38 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--smoke-test", action="store_true",
                         help="Open Qt picker/tray and quit after 1.2 seconds")
+    parser.add_argument("--build", action="store_true",
+                        help="Build and verify the Windows EXE (source only)")
     args = parser.parse_args(argv)
 
     if sys.platform != "win32":
         parser.exit(ExitCode.FAILURE, "GamaniJJom requires Windows.\n")
+    if args.build:
+        if is_frozen():
+            parser.error("--build is only available from the source checkout")
+        if args.check or args.smoke_test:
+            parser.error("--build cannot be combined with --check or --smoke-test")
     return args
+
+
+def build_exe() -> int:
+    script = PROJECT_ROOT / "packaging" / "build-exe.ps1"
+    if not script.is_file():
+        print(f"Build script not found: {script}", file=sys.stderr)
+        return ExitCode.FAILURE
+
+    try:
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "RemoteSigned",
+             "-File", str(script), "-Python", sys.executable],
+            cwd=PROJECT_ROOT,
+        )
+        return result.returncode
+    except KeyboardInterrupt:
+        return ExitCode.INTERRUPTED
+    except OSError as exc:
+        print(f"Could not start the build: {exc}", file=sys.stderr)
+        return ExitCode.FAILURE
 
 
 def initialize_context(config_path: Path):
@@ -104,7 +132,8 @@ def run(ctx, args: argparse.Namespace) -> ExitCode:
     app = QApplication([sys.argv[0]])
     app.setApplicationName("GamaniJJom")
     app.setQuitOnLastWindowClosed(False)
-    from src.ui.resources import apply_theme
+    from src.ui.resources import app_icon, apply_theme
+    app.setWindowIcon(app_icon())
     apply_theme(app)
 
     callback_failed = False
@@ -153,6 +182,9 @@ def run(ctx, args: argparse.Namespace) -> ExitCode:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+
+    if args.build:
+        return build_exe()
 
     try:
         ctx = initialize_context(args.cfg)

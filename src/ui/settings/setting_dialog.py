@@ -435,7 +435,7 @@ class SettingDialog(QDialog):
             initial_dir = str(Path.home())
 
         selected = QFileDialog.getExistingDirectory(
-            self.parentWidget() or self, "저장 경로 선택", initial_dir, QFileDialog.Option.ShowDirsOnly
+            self, "저장 경로 선택", initial_dir, QFileDialog.Option.ShowDirsOnly
         )
         if not selected:
             return

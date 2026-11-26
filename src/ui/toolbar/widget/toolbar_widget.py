@@ -10,11 +10,13 @@ or injected from QSS (theme.qss), no code change needed:
 
     QWidget#toolbarWindow { qproperty-toolbarTheme: "square"; }
 """
-from PySide6.QtCore import Property, Qt
+from PySide6.QtCore import Property, Qt, QTimer
 from PySide6.QtWidgets import QHBoxLayout, QWidget
 
+from src.adapters.windows import window_api
 from src.ui.cmm.cmm_window_flags import TOOLBAR_WINDOW_FLAGS
 from src.ui.cmm.cmm_window_overlay import CmmWindowOverlay
+from src.ui.resources import app_icon
 from src.ui.toolbar.widget import themes  # noqa: F401  (registers the built-in themes)
 from src.ui.toolbar.widget.toolbar_cover_widget import ToolbarCoverWidget
 from src.ui.toolbar.widget.toolbar_theme import THEME_ALIASES, ToolbarTheme, create_theme
@@ -27,11 +29,14 @@ class ToolbarWidget(QWidget):
         super().__init__(parent, TOOLBAR_WINDOW_FLAGS)
         self.log = None
         self._closing = False
+        self._taskbar_enabled = False
+        self._taskbar_hwnd = None
         self._candidate = None
         self.setObjectName('toolbarWindow')
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setWindowTitle(f'GamaniJJom — {title}')
+        self.setWindowIcon(app_icon())
 
         self._theme = create_theme(DEFAULT_THEME)
         self.toolbar = ToolbarCoverWidget(self._theme, self)
@@ -98,6 +103,46 @@ class ToolbarWidget(QWidget):
         self.toolbar.cancel_drag()
 
     # ---- Window ----------------------------------------------------------------------
+    def set_taskbar_enabled(self, enabled: bool):
+        self._taskbar_enabled = enabled
+        self._sync_taskbar()
+
+    def _sync_taskbar(self):
+        if self._closing or not self._taskbar_enabled or not self.isVisible():
+            self._remove_taskbar()
+            return
+        hwnd = int(self.winId())
+        if self._taskbar_hwnd == hwnd:
+            return
+        self._remove_taskbar()
+        try:
+            window_api.set_taskbar_visible(hwnd, True)
+        except OSError as error:
+            if self.log is not None:
+                self.log.warning("TASKBAR", str(error))
+        else:
+            self._taskbar_hwnd = hwnd
+
+    def _remove_taskbar(self):
+        hwnd = self._taskbar_hwnd
+        if hwnd is None:
+            return
+        self._taskbar_hwnd = None
+        try:
+            window_api.set_taskbar_visible(hwnd, False)
+        except OSError as error:
+            if self.log is not None:
+                self.log.warning("TASKBAR", str(error))
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        # Qt's show event may precede actual native visibility.
+        QTimer.singleShot(0, self._sync_taskbar)
+
+    def hideEvent(self, event):
+        self._remove_taskbar()
+        super().hideEvent(event)
+
     def ensure_visible(self):
         # show() preserves WindowMinimized, leaving an apparently visible QWidget
         # at native minimized coordinates. Restore only this toolbar window.
@@ -125,6 +170,7 @@ class ToolbarWidget(QWidget):
         if self._closing:
             return
         self._closing = True
+        self._remove_taskbar()
         self.toolbar.dispose()
         if self._candidate is not None:
             self._candidate.close()
