@@ -1,7 +1,7 @@
 """Floating windows and pointer input for region capture."""
 from PySide6.QtCore import QLocale, QRectF, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QIntValidator, QLinearGradient, QPainter, QPainterPath, QPen
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QToolButton, QWidget
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QLineEdit, QToolButton, QWidget
 
 from src.adapters.windows import window_api
 from src.models.window_schema import WindowRect
@@ -10,7 +10,36 @@ from src.ui.cmm.cmm_window_overlay import CmmWindowOverlay
 from src.ui.resources import icon, theme_color, theme_token
 
 MIN_SIZE = 8
+GRIP = 9
 SELECTION_DIM = QColor(0, 0, 0, 100)
+
+# edge: (가로 비율, 세로 비율, 커서)
+_HANDLES = {
+    'nw': (0.0, 0.0, Qt.CursorShape.SizeFDiagCursor),
+    'n': (0.5, 0.0, Qt.CursorShape.SizeVerCursor),
+    'ne': (1.0, 0.0, Qt.CursorShape.SizeBDiagCursor),
+    'e': (1.0, 0.5, Qt.CursorShape.SizeHorCursor),
+    'se': (1.0, 1.0, Qt.CursorShape.SizeFDiagCursor),
+    's': (0.5, 1.0, Qt.CursorShape.SizeVerCursor),
+    'sw': (0.0, 1.0, Qt.CursorShape.SizeBDiagCursor),
+    'w': (0.0, 0.5, Qt.CursorShape.SizeHorCursor),
+}
+
+
+def resize_rect(rect, edge, dx, dy):
+    """edge('n', 'se', 'w' 등) 방향으로 dx, dy만큼 드래그한 새 영역. 최소 크기를 보장."""
+    x, y, w, h = rect.x, rect.y, rect.width, rect.height
+    if 'w' in edge:
+        dx = min(dx, w - MIN_SIZE)
+        x, w = x + dx, w - dx
+    if 'e' in edge:
+        w = max(MIN_SIZE, w + dx)
+    if 'n' in edge:
+        dy = min(dy, h - MIN_SIZE)
+        y, h = y + dy, h - dy
+    if 's' in edge:
+        h = max(MIN_SIZE, h + dy)
+    return WindowRect(x, y, w, h)
 
 
 def _place(widget, rect):
@@ -63,7 +92,7 @@ class _DragLabel(QLabel):
 
 
 class RegionCaptureDialog(QWidget):
-    """Non-modal selection surface, outline, capture bar and resize grip."""
+    """Non-modal selection surface, outline, capture bar and resize handles."""
 
     preview = Signal(object)
     finished = Signal(object)
@@ -72,7 +101,7 @@ class RegionCaptureDialog(QWidget):
     lock_requested = Signal(bool)
     pin_requested = Signal(bool)
     moved = Signal(int, int)
-    resized = Signal(int, int)
+    edge_resized = Signal(str, int, int)  # edge, dx, dy
     size_requested = Signal(int, int)
 
     def __init__(self):
@@ -114,40 +143,70 @@ class RegionCaptureDialog(QWidget):
         for field in (self._width, self._height):
             field.textChanged.connect(self._update_apply)
             field.returnPressed.connect(self._apply_size)
-        self._coordinates = QLabel(self._bar)
-        self._coordinates.setObjectName('muted')
+
+        toggle_style = (
+            "QToolButton#captureRegionToggle { padding: 2px 6px; border-radius: 4px; }"
+            "QToolButton#captureRegionToggle:checked {"
+            f" background: {theme_token('border-window-highlight')}; color: white; }}"
+        )
+
         self._capture = QToolButton(self._bar)
         self._capture.setObjectName('captureRegionButton')
         self._capture.setIcon(icon('camera'))
         self._capture.setAccessibleName('선택 영역 캡처')
         self._capture.setToolTip('선택 영역 캡처')
         self._capture.clicked.connect(self.capture_requested.emit)
-        self._lock = QToolButton(self._bar)
-        self._lock.setCheckable(True)
-        self._lock_icons = {False: icon('lock'), True: icon('unlock')}
+
+        self._lock = self._toggle_button('크기 고정', toggle_style)
+        self._lock.setIcon(icon('unlock'))
         self._lock.clicked[bool].connect(self.lock_requested.emit)
-        self._pin = QToolButton(self._bar)
+
+        self._pin = self._toggle_button('위치 고정', toggle_style)
         self._pin.setIcon(icon('pin'))
-        self._pin.setCheckable(True)
         self._pin.clicked[bool].connect(self.pin_requested.emit)
+
         self._close = QToolButton(self._bar)
         self._close.setText('✕')
         self._close.setAccessibleName('닫기')
         self._close.setToolTip('닫기')
         self._close.clicked.connect(self.clear_requested.emit)
-        self._bar_controls = (self._move_handle, self._width, separator, self._height, self._size, self._apply,
-                              self._coordinates, self._pin, self._lock, self._capture, self._close)
+
+        # [이동] [너비×높이 px 적용] [크기 고정] | [위치 고정] | [캡처 닫기]
+        self._bar_controls = (
+            self._move_handle, self._width, separator, self._height, self._size, self._apply,
+            self._lock, self._divider(),
+            self._pin, self._divider(),
+            self._capture, self._close,
+        )
         for control in self._bar_controls:
             layout.addWidget(control)
 
-        self._grip = _DragLabel(Qt.CursorShape.SizeFDiagCursor)
-        self._grip.setWindowFlags(REGION_GRIP_WINDOW_FLAGS)
-        self._grip.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
-        self._grip.setStyleSheet(
-            f"background: {theme_token('border-window-highlight')}; border-radius: 2px;"
-        )
-        self._grip.setToolTip('드래그하여 크기 조절')
-        self._grip.dragged.connect(self.resized.emit)
+        # 8방향 리사이즈 핸들 (꼭짓점 4 + 변 중앙 4)
+        self._handles = {}
+        grip_style = f"background: {theme_token('border-window-highlight')}; border-radius: 2px;"
+        for edge, (_, _, cursor) in _HANDLES.items():
+            handle = _DragLabel(cursor)
+            handle.setWindowFlags(REGION_GRIP_WINDOW_FLAGS)
+            handle.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+            handle.setStyleSheet(grip_style)
+            handle.setToolTip('드래그하여 크기 조절')
+            handle.dragged.connect(lambda dx, dy, e=edge: self.edge_resized.emit(e, dx, dy))
+            self._handles[edge] = handle
+
+    def _toggle_button(self, text, style):
+        button = QToolButton(self._bar)
+        button.setObjectName('captureRegionToggle')
+        button.setText(text)
+        button.setCheckable(True)
+        button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        button.setStyleSheet(style)
+        return button
+
+    def _divider(self):
+        line = QFrame(self._bar)
+        line.setFrameShape(QFrame.Shape.VLine)
+        line.setFrameShadow(QFrame.Shadow.Sunken)
+        return line
 
     def _size_field(self, label):
         field = QLineEdit(self._bar)
@@ -247,15 +306,19 @@ class RegionCaptureDialog(QWidget):
         _place(self._outline, rect)
         self._outline.raise_()
         self._size.setText(f'{rect.width} × {rect.height} px' if selecting else 'px')
-        self._coordinates.setText('화면 고정' if pinned else ('창 연결' if follows_window else '연결 해제'))
         for control in self._bar_controls:
             control.setVisible(not selecting or control is self._size)
         if not selecting:
             self._show_size(rect.width, rect.height, locked)
             self._pin.setChecked(pinned)
-            label = '화면 위치 고정 해제' if pinned else '화면 위치 고정'
-            self._pin.setToolTip(label)
-            self._pin.setAccessibleName(label)
+            if pinned:
+                tip = '위치 고정 해제 (창을 다시 따라감)'
+            elif follows_window:
+                tip = '위치 고정: 창이 움직여도 이 화면 좌표에 유지'
+            else:
+                tip = '위치 고정: 현재 창 연결이 해제된 상태입니다'
+            self._pin.setToolTip(tip)
+            self._pin.setAccessibleName('위치 고정 해제' if pinned else '위치 고정')
             self._move_handle.setEnabled(not pinned)
             self._size.setEnabled(not pinned)
 
@@ -273,12 +336,14 @@ class RegionCaptureDialog(QWidget):
         self._bar.raise_()
 
         if not selecting and not locked:
-            grip = 9
-            _place(self._grip, WindowRect(rect.x + rect.width - grip,
-                                         rect.y + rect.height - grip, grip, grip))
-            self._grip.raise_()
+            for edge, (fx, fy, _) in _HANDLES.items():
+                handle = self._handles[edge]
+                _place(handle, WindowRect(round(rect.x + rect.width * fx - GRIP / 2),
+                                          round(rect.y + rect.height * fy - GRIP / 2), GRIP, GRIP))
+                handle.raise_()
         else:
-            self._grip.hide()
+            for handle in self._handles.values():
+                handle.hide()
 
     def _show_size(self, width, height, locked):
         size = (width, height)
@@ -289,18 +354,19 @@ class RegionCaptureDialog(QWidget):
         self._width.setReadOnly(locked)
         self._height.setReadOnly(locked)
         self._lock.setChecked(locked)
-        self._lock.setIcon(self._lock_icons[locked])
-        label = '크기 잠금 해제' if locked else '크기 잠금'
-        self._lock.setToolTip(label)
-        self._lock.setAccessibleName(label)
+        self._lock.setIcon(icon('lock') if locked else icon('unlock'))  # 현재 상태를 표시
+        tip = ('크기 고정 해제' if locked
+               else '크기 고정: 크기 입력과 모서리·변 핸들을 잠급니다')
+        self._lock.setToolTip(tip)
+        self._lock.setAccessibleName('크기 고정 해제' if locked else '크기 고정')
         self._update_apply()
 
     def hide_preview(self):
-        for widget in (self._outline, self._bar, self._grip):
+        for widget in (self._outline, self._bar, *self._handles.values()):
             widget.hide()
 
     def dispose(self):
         self.end()
-        for widget in (self._outline, self._bar, self._grip, self):
+        for widget in (self._outline, self._bar, *self._handles.values(), self):
             widget.close()
             widget.deleteLater()

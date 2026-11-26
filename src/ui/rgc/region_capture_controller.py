@@ -3,7 +3,7 @@ from dataclasses import replace
 
 from PySide6.QtCore import QObject, Signal
 
-from src.ui.rgc.region_capture_dialog import MIN_SIZE, RegionCaptureDialog
+from src.ui.rgc.region_capture_dialog import RegionCaptureDialog, resize_rect
 
 
 def _move(rect, dx, dy):
@@ -33,7 +33,7 @@ class RegionCaptureController(QObject):
         self._dialog.lock_requested.connect(self._set_size_locked)
         self._dialog.pin_requested.connect(self._set_position_pinned)
         self._dialog.moved.connect(self._move_region)
-        self._dialog.resized.connect(self._resize_region)
+        self._dialog.edge_resized.connect(self._resize_region)
         self._dialog.size_requested.connect(self._set_size)
 
     def start(self):
@@ -107,10 +107,11 @@ class RegionCaptureController(QObject):
             self.rect = _move(self.rect, dx, dy)
             self.refresh()
 
-    def _resize_region(self, dx, dy):
-        if self.rect is not None:
-            self._set_size(max(MIN_SIZE, self.rect.width + dx),
-                           max(MIN_SIZE, self.rect.height + dy))
+    def _resize_region(self, edge, dx, dy):
+        # self.rect는 고정 여부에 따라 화면/대상 기준 좌표지만, 상대 변화량만 쓰므로 동일하게 적용된다.
+        if self.rect is not None and not self._size_locked and not self.selecting:
+            self.rect = resize_rect(self.rect, edge, dx, dy)
+            self.refresh()
 
     def _set_size(self, width, height):
         if self.rect is not None and not self._size_locked and not self.selecting:
