@@ -14,7 +14,7 @@ MIN_SIZE = 8
 CORNER_GRIP = 11
 EDGE_GRIP = 9
 ICON_SIZE = QSize(16, 16)
-# 켜짐(True)/꺼짐(False) 아이콘 이름. 상태와 반대로 보이면 이름만 서로 바꾸세요.
+
 LOCK_ICON = {True: 'lock', False: 'unlock'}
 PIN_ICON = {True: 'pin', False: 'pin'}
 OFF_OPACITY = 0.45  # 꺼진 토글 아이콘을 흐리게 보여 켜짐/꺼짐을 구분
